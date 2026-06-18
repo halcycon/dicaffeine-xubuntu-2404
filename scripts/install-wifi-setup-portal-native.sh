@@ -42,7 +42,12 @@ SETUP_PORT=$(printf '%q' "$SETUP_PORT")
 QR_DIR=$(printf '%q' "$QR_DIR")
 EOFCONF
 
-sudo chmod 600 /etc/default/wyse-wifi-setup
+# This file is read by root services and by the desktop overlay helper running as TARGET_USER.
+# It contains only setup-mode defaults, not saved venue Wi-Fi credentials.
+sudo chown root:"$TARGET_USER" /etc/default/wyse-wifi-setup
+sudo chmod 640 /etc/default/wyse-wifi-setup
+
+
 
 echo "== Preparing QR/status directory =="
 
