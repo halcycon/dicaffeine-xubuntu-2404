@@ -323,6 +323,18 @@ sudo -u "$TARGET_USER" xfconf-query -c xfce4-power-manager -p /xfce4-power-manag
 sudo -u "$TARGET_USER" xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -n -t int -s 0 2>/dev/null || true
 sudo -u "$TARGET_USER" xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -n -t bool -s false 2>/dev/null || true
 
+echo "== Installing optional Dicaffeine boot/wallpaper theme =="
+
+if [ "${INSTALL_DICAFFEINE_THEME:-1}" = "1" ]; then
+  if [ -x ./scripts/install-dicaffeine-theme.sh ]; then
+    ./scripts/install-dicaffeine-theme.sh
+  else
+    echo "Theme installer not found; skipping."
+  fi
+else
+  echo "INSTALL_DICAFFEINE_THEME=0 set; skipping theme install."
+fi
+
 echo "== Creating helper scripts =="
 
 sudo -u "$TARGET_USER" mkdir -p "$TARGET_HOME/bin"
@@ -381,6 +393,65 @@ sudo loginctl enable-linger "$TARGET_USER" || true
 sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")" systemctl --user daemon-reload || true
 sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")" systemctl --user enable dicaffeine || true
 sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")" systemctl --user restart dicaffeine || true
+
+echo "== Applying Dell Wyse 3040 DMA workaround =="
+
+sudo tee /etc/modprobe.d/wyse-3040-reboot-fix.conf >/dev/null <<'EOF'
+# Dell Wyse 3040 Linux reboot/shutdown hang workaround.
+# Prevent DesignWare DMA / HSUART DMA modules from loading.
+blacklist dw_dmac
+blacklist dw_dmac_core
+install dw_dmac /bin/true
+install dw_dmac_core /bin/true
+EOF
+
+sudo update-initramfs -u
+
+echo "== Applying Dell Wyse 3040 reboot method workaround =="
+
+sudo cp /etc/default/grub "/etc/default/grub.bak.reboot-pci.$(date +%Y%m%d-%H%M%S)"
+
+sudo python3 - <<'PY'
+from pathlib import Path
+import shlex
+
+p = Path("/etc/default/grub")
+lines = p.read_text().splitlines()
+out = []
+seen = False
+
+for line in lines:
+    if line.startswith("GRUB_CMDLINE_LINUX_DEFAULT="):
+        seen = True
+        _, value = line.split("=", 1)
+
+        try:
+            words = shlex.split(value.strip())
+        except Exception:
+            words = []
+
+        # Remove duplicate quiet/splash/vt.handoff and any previous reboot= mode.
+        cleaned = []
+        for word in words:
+            if word.startswith("reboot="):
+                continue
+            if word not in cleaned:
+                cleaned.append(word)
+
+        if "reboot=pci" not in cleaned:
+            cleaned.append("reboot=pci")
+
+        out.append('GRUB_CMDLINE_LINUX_DEFAULT="' + " ".join(cleaned) + '"')
+    else:
+        out.append(line)
+
+if not seen:
+    out.append('GRUB_CMDLINE_LINUX_DEFAULT="quiet splash reboot=pci"')
+
+p.write_text("\n".join(out) + "\n")
+PY
+
+sudo update-grub
 
 echo "== Final sanity checks =="
 
