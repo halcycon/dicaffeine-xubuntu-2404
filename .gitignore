@@ -1,0 +1,5 @@
+# NDI runtime / SDK package
+# We do not commit proprietary NDI binaries.
+debs/*ndi*.deb
+debs/ndi*.deb
+

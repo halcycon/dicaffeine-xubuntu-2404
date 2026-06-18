@@ -1,7 +1,6 @@
 # Wyse 3040 NDI / Dicaffeine Projection Receiver Notes
 
 ## Purpose
-Wrapper for yuri/dicaffeine to make it run optimally on xubuntu 24.04 - notably this will run on a Dell/Wyse 3040 thin client.
 
 This document records the working setup for using a Dell Wyse 3040 as a lightweight NDI projection receiver for church/projector use.
 
@@ -20,6 +19,13 @@ Projector / HDMI / DisplayPort output
 The final working approach uses the Dicaffeine web GUI for source selection and play/stop control, but overrides the actual Yuri player command so that playback uses a known-good SDL2/RGBA32 pipeline.
 
 ---
+
+## Licensing Considerations
+This project does not redistribute the NDI® runtime or SDK.
+
+During installation, the helper script can download the NDI SDK for Linux from NDI's official download URL and install the required runtime library locally. Use of the NDI SDK/runtime is subject to NDI's licence terms.
+
+NDI® is a registered trademark of Vizrt NDI AB.
 
 ## Hardware and OS
 
