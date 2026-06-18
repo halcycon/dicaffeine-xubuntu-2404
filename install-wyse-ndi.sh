@@ -465,13 +465,13 @@ else
   echo "INSTALL_DESKTOP_INFO_OVERLAY=0 set; skipping desktop info overlay."
 fi
 
-echo "== Installing optional Wi-Fi setup portal watcher =="
+echo "== Installing optional native Wi-Fi setup portal watcher =="
 
-if [ "${INSTALL_WIFI_SETUP_PORTAL:-0}" = "1" ]; then
-  if [ -x ./scripts/install-wifi-setup-portal.sh ]; then
-    ./scripts/install-wifi-setup-portal.sh
+if [ "${INSTALL_WIFI_SETUP_PORTAL:-1}" = "1" ]; then
+  if [ -x ./scripts/install-wifi-setup-portal-native.sh ]; then
+    ./scripts/install-wifi-setup-portal-native.sh
   else
-    echo "Wi-Fi setup portal installer not found; skipping."
+    echo "Native Wi-Fi setup portal installer not found; skipping."
   fi
 else
   echo "INSTALL_WIFI_SETUP_PORTAL=0; skipping Wi-Fi setup portal watcher."
