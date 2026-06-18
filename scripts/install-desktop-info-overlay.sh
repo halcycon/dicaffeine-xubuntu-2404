@@ -59,7 +59,18 @@ echo "IP addresses:"
 ip -o -4 addr show scope global 2>/dev/null |
   awk '{
     split($4, a, "/");
-    printf "  %-10s %s\n", $2 ":", a[1]
+    iface=$2;
+
+    # Keep the overlay compact so it does not collide with the QR code.
+    short=iface;
+    if (short ~ /^en/) short="eth";
+    else if (short ~ /^wl/) short="wifi";
+    else if (short ~ /^tailscale/) short="ts";
+    else if (short ~ /^docker/) short="dock";
+    else if (short ~ /^br-/) short="br";
+    else if (length(short) > 8) short=substr(short,1,8);
+
+    printf "  %-6s %s\n", short ":", a[1]
   }'
 
 if ! ip -o -4 addr show scope global 2>/dev/null | grep -q .; then
@@ -138,9 +149,9 @@ conky.config = {
     color1 = '9CDCFE',
     color2 = 'A6E22E',
 
-    minimum_width = 390,
+    minimum_width = 430,
     minimum_height = 180,
-    maximum_width = 390,
+    maximum_width = 430,
 
     gap_x = 20,
     gap_y = 20,
@@ -153,7 +164,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-ndi-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}Dicaffeine Receiver${color}${font}
 ${execi 10 /usr/local/bin/wyse-ndi-status}
-${image /tmp/dicaffeine-webui-qr.png -p 250,42 -s 115x115}
+${image /tmp/dicaffeine-webui-qr.png -p 300,42 -s 110x110}
 ]];
 EOF
 

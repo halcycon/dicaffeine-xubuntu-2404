@@ -453,6 +453,18 @@ PY
 
 sudo update-grub
 
+echo "== Installing optional desktop info overlay =="
+
+if [ "${INSTALL_DESKTOP_INFO_OVERLAY:-1}" = "1" ]; then
+  if [ -x ./scripts/install-desktop-info-overlay.sh ]; then
+    ./scripts/install-desktop-info-overlay.sh
+  else
+    echo "Desktop info overlay installer not found; skipping."
+  fi
+else
+  echo "INSTALL_DESKTOP_INFO_OVERLAY=0 set; skipping desktop info overlay."
+fi
+
 echo "== Final sanity checks =="
 
 sudo ldconfig
