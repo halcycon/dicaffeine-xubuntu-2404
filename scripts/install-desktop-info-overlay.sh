@@ -42,6 +42,15 @@ fi
 
 host="$(hostname -s)"
 
+wifi_ssid="$(
+  nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null |
+    awk -F: '$1=="yes" {print $2; exit}'
+)"
+
+if [ -z "${wifi_ssid:-}" ]; then
+  wifi_ssid="not connected"
+fi
+
 dicaffeine_state="$(
   systemctl --user is-active dicaffeine 2>/dev/null || true
 )"
@@ -52,6 +61,7 @@ fi
 
 echo "Host: ${host}"
 echo "Web:  ${web_url}"
+echo "WiFi: ${wifi_ssid}"
 echo "Dicaffeine: ${dicaffeine_state}"
 echo
 echo "IP addresses:"
