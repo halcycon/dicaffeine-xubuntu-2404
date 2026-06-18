@@ -25,6 +25,25 @@ sudo tee /usr/local/bin/wyse-ndi-status >/dev/null <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
+SETUP_STATE="/run/wyse-wifi-setup/state"
+
+if [ -f "$SETUP_STATE" ]; then
+  # shellcheck disable=SC1090
+  . "$SETUP_STATE" || true
+fi
+
+if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
+  echo "Wi-Fi Setup Mode"
+  echo "SSID: ${WYSE_WIFI_SETUP_SSID:-Dicaffeine-Setup}"
+  echo "Pass: ${WYSE_WIFI_SETUP_PASSPHRASE:-dicaffeine}"
+  echo "Open: http://192.168.42.1/"
+  echo
+  echo "Scan QR to join setup Wi-Fi."
+  echo "If no page opens, browse to"
+  echo "http://192.168.42.1/"
+  exit 0
+fi
+
 primary_ip="$(
   ip -4 route get 1.1.1.1 2>/dev/null |
     awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
@@ -98,30 +117,52 @@ set -euo pipefail
 
 QR_FILE="/tmp/dicaffeine-webui-qr.png"
 URL_FILE="/tmp/dicaffeine-webui-url.txt"
+SETUP_STATE="/run/wyse-wifi-setup/state"
 
-primary_ip="$(
-  ip -4 route get 1.1.1.1 2>/dev/null |
-    awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
-)"
+setup_ssid="Dicaffeine-Setup"
+setup_passphrase="dicaffeine"
 
-if [ -z "${primary_ip:-}" ]; then
-  primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+mode="normal"
+
+if [ -f "$SETUP_STATE" ]; then
+  # shellcheck disable=SC1090
+  . "$SETUP_STATE" || true
 fi
 
-if [ -n "${primary_ip:-}" ]; then
-  url="http://${primary_ip}/"
+if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
+  mode="setup"
+fi
+
+if [ "$mode" = "setup" ]; then
+  qr_payload="WIFI:T:WPA;S:${WYSE_WIFI_SETUP_SSID:-$setup_ssid};P:${WYSE_WIFI_SETUP_PASSPHRASE:-$setup_passphrase};;"
+  display_target="SETUP_WIFI:${WYSE_WIFI_SETUP_SSID:-$setup_ssid}"
 else
-  url="http://$(hostname -s).local/"
+  primary_ip="$(
+    ip -4 route get 1.1.1.1 2>/dev/null |
+      awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
+  )"
+
+  if [ -z "${primary_ip:-}" ]; then
+    primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+
+  if [ -n "${primary_ip:-}" ]; then
+    qr_payload="http://${primary_ip}/"
+    display_target="$qr_payload"
+  else
+    qr_payload="http://$(hostname -s).local/"
+    display_target="$qr_payload"
+  fi
 fi
 
-old_url=""
+old_target=""
 if [ -f "$URL_FILE" ]; then
-  old_url="$(cat "$URL_FILE" 2>/dev/null || true)"
+  old_target="$(cat "$URL_FILE" 2>/dev/null || true)"
 fi
 
-if [ "$url" != "$old_url" ] || [ ! -s "$QR_FILE" ]; then
-  printf '%s\n' "$url" > "$URL_FILE"
-  qrencode -o "$QR_FILE" -s 5 -m 2 "$url"
+if [ "$display_target" != "$old_target" ] || [ ! -s "$QR_FILE" ]; then
+  printf '%s\n' "$display_target" > "$URL_FILE"
+  qrencode -o "$QR_FILE" -s 5 -m 2 "$qr_payload"
 fi
 EOF
 

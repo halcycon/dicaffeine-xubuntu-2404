@@ -465,6 +465,18 @@ else
   echo "INSTALL_DESKTOP_INFO_OVERLAY=0 set; skipping desktop info overlay."
 fi
 
+echo "== Installing optional Wi-Fi setup portal watcher =="
+
+if [ "${INSTALL_WIFI_SETUP_PORTAL:-0}" = "1" ]; then
+  if [ -x ./scripts/install-wifi-setup-portal.sh ]; then
+    ./scripts/install-wifi-setup-portal.sh
+  else
+    echo "Wi-Fi setup portal installer not found; skipping."
+  fi
+else
+  echo "INSTALL_WIFI_SETUP_PORTAL=0; skipping Wi-Fi setup portal watcher."
+fi
+
 echo "== Final sanity checks =="
 
 sudo ldconfig
