@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+UPDATE_MODE="${UPDATE_MODE:-0}"
+KIT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
 echo "== Checking sudo access =="
 sudo -v
 
-TARGET_USER="${TARGET_USER:-ndi}"
+TARGET_USER="${SUDO_USER:-${TARGET_USER:-ndi}}"
 SETUP_SSID="${SETUP_SSID:-Dicaffeine-Setup}"
 SETUP_PASSPHRASE="${SETUP_PASSPHRASE:-dicaffeine}"
 SETUP_GATEWAY="${SETUP_GATEWAY:-192.168.44.1}"
@@ -12,16 +15,22 @@ SETUP_CIDR="${SETUP_CIDR:-192.168.44.1/24}"
 SETUP_PORT="${SETUP_PORT:-80}"
 QR_DIR="${QR_DIR:-/var/lib/wyse-ndi}"
 
-echo "== Installing native Wi-Fi setup portal dependencies =="
+if [ "$UPDATE_MODE" != "1" ] || ! command -v nmcli >/dev/null 2>&1; then
+  echo "== Installing native Wi-Fi setup portal dependencies =="
 
-sudo apt update
-sudo apt install --no-install-recommends -y \
-  network-manager \
-  dnsmasq-base \
-  iw \
-  qrencode \
-  python3 \
-  iproute2
+  sudo apt update
+  sudo apt install --no-install-recommends -y \
+    network-manager \
+    dnsmasq-base \
+    iw \
+    qrencode \
+    python3 \
+    iproute2
+else
+  echo "== Update mode: NetworkManager already installed; refreshing portal scripts =="
+fi
+
+UPDATE_MODE="$UPDATE_MODE" TARGET_USER="$TARGET_USER" bash "${KIT_ROOT}/scripts/install-common-helpers.sh"
 
 echo "== Fixing netplan permissions warning, if present =="
 
@@ -32,7 +41,10 @@ fi
 
 echo "== Writing config =="
 
-sudo tee /etc/default/wyse-wifi-setup >/dev/null <<EOFCONF
+if [ -f /etc/default/wyse-wifi-setup ] && [ "$UPDATE_MODE" = "1" ] && [ "${FORCE_WIFI_CONFIG:-0}" != "1" ]; then
+  echo "Update mode: keeping existing /etc/default/wyse-wifi-setup"
+else
+  sudo tee /etc/default/wyse-wifi-setup >/dev/null <<EOFCONF
 TARGET_USER=$(printf '%q' "$TARGET_USER")
 SETUP_SSID=$(printf '%q' "$SETUP_SSID")
 SETUP_PASSPHRASE=$(printf '%q' "$SETUP_PASSPHRASE")
@@ -42,10 +54,11 @@ SETUP_PORT=$(printf '%q' "$SETUP_PORT")
 QR_DIR=$(printf '%q' "$QR_DIR")
 EOFCONF
 
-# This file is read by root services and by the desktop overlay helper running as TARGET_USER.
-# It contains only setup-mode defaults, not saved venue Wi-Fi credentials.
-sudo chown root:"$TARGET_USER" /etc/default/wyse-wifi-setup
-sudo chmod 640 /etc/default/wyse-wifi-setup
+  # This file is read by root services and by the desktop overlay helper running as TARGET_USER.
+  # It contains only setup-mode defaults, not saved venue Wi-Fi credentials.
+  sudo chown root:"$TARGET_USER" /etc/default/wyse-wifi-setup
+  sudo chmod 640 /etc/default/wyse-wifi-setup
+fi
 
 
 
@@ -96,192 +109,6 @@ exec sudo -u "$TARGET_USER" env \
 EOFUSERCTL
 
 sudo chmod +x /usr/local/bin/wyse-dicaffeine-userctl
-
-echo "== Installing mode-aware QR helper =="
-
-sudo tee /usr/local/bin/wyse-ndi-update-qr >/dev/null <<'EOFQR'
-#!/usr/bin/env bash
-set -euo pipefail
-
-. /etc/default/wyse-wifi-setup
-
-STATE_FILE="/run/wyse-wifi-setup/state"
-QR_FILE="$QR_DIR/dicaffeine-webui-qr.png"
-URL_FILE="$QR_DIR/dicaffeine-webui-url.txt"
-
-mkdir -p "$QR_DIR" 2>/dev/null || true
-
-mode="normal"
-
-if [ -f "$STATE_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$STATE_FILE" || true
-fi
-
-wifi_qr_escape() {
-  sed \
-    -e 's/\\/\\\\/g' \
-    -e 's/;/\\;/g' \
-    -e 's/,/\\,/g' \
-    -e 's/:/\\:/g' \
-    -e 's/"/\\"/g'
-}
-
-if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
-  mode="setup"
-fi
-
-if [ "$mode" = "setup" ]; then
-  setup_ssid="${WYSE_WIFI_SETUP_SSID:-Dicaffeine-Setup}"
-  setup_passphrase="${WYSE_WIFI_SETUP_PASSPHRASE:-dicaffeine}"
-
-  esc_ssid="$(printf '%s' "$setup_ssid" | wifi_qr_escape)"
-  esc_pass="$(printf '%s' "$setup_passphrase" | wifi_qr_escape)"
-
-  qr_payload="WIFI:T:WPA;S:${esc_ssid};P:${esc_pass};;"
-  display_target="SETUP_WIFI:${setup_ssid}"
-else
-  primary_ip="$(
-    ip -4 route get 1.1.1.1 2>/dev/null |
-      awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
-  )"
-
-  if [ -z "${primary_ip:-}" ]; then
-    primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  fi
-
-  if [ -n "${primary_ip:-}" ]; then
-    qr_payload="http://${primary_ip}/"
-    display_target="$qr_payload"
-  else
-    qr_payload="http://$(hostname -s).local/"
-    display_target="$qr_payload"
-  fi
-fi
-
-old_target=""
-if [ -f "$URL_FILE" ]; then
-  old_target="$(cat "$URL_FILE" 2>/dev/null || true)"
-fi
-
-if [ "$display_target" != "$old_target" ] || [ ! -s "$QR_FILE" ]; then
-  printf '%s\n' "$display_target" > "$URL_FILE"
-  qrencode -o "$QR_FILE" -s 5 -m 2 "$qr_payload"
-
-  if [ "$(id -u)" -eq 0 ]; then
-    chown "$TARGET_USER:$TARGET_USER" "$QR_FILE" "$URL_FILE" 2>/dev/null || true
-  fi
-
-  chmod 0644 "$QR_FILE" "$URL_FILE" 2>/dev/null || true
-fi
-EOFQR
-
-sudo chmod +x /usr/local/bin/wyse-ndi-update-qr
-
-echo "== Installing mode-aware status helper =="
-
-sudo tee /usr/local/bin/wyse-ndi-status >/dev/null <<'EOFSTATUS'
-#!/usr/bin/env bash
-set -euo pipefail
-
-STATE_FILE="/run/wyse-wifi-setup/state"
-
-if [ -f "$STATE_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$STATE_FILE" || true
-fi
-
-if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
-  if [ "${WYSE_WIFI_SETUP_CONNECTING:-0}" = "1" ]; then
-    echo "Wi-Fi Setup"
-    echo "Connecting to:"
-    echo "${WYSE_WIFI_SETUP_TARGET_SSID:-selected network}"
-    echo
-    echo "Setup AP may close."
-    echo "Wait for normal QR."
-    exit 0
-  fi
-
-  echo "Wi-Fi Setup Mode"
-  echo "SSID: ${WYSE_WIFI_SETUP_SSID:-Dicaffeine-Setup}"
-  echo "Pass: ${WYSE_WIFI_SETUP_PASSPHRASE:-dicaffeine}"
-  echo "Open: http://${WYSE_WIFI_SETUP_GATEWAY:-192.168.44.1}/"
-  echo
-
-  if [ -n "${WYSE_WIFI_SETUP_ERROR:-}" ]; then
-    echo "Last error:"
-    echo "${WYSE_WIFI_SETUP_ERROR}"
-    echo
-  fi
-
-  echo "Scan QR to join setup Wi-Fi."
-  echo "Then configure venue Wi-Fi."
-  exit 0
-fi
-
-primary_ip="$(
-  ip -4 route get 1.1.1.1 2>/dev/null |
-    awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
-)"
-
-if [ -z "${primary_ip:-}" ]; then
-  primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-fi
-
-if [ -n "${primary_ip:-}" ]; then
-  web_url="http://${primary_ip}/"
-else
-  web_url="No network"
-fi
-
-host="$(hostname -s)"
-
-wifi_ssid="$(
-  nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null |
-    awk -F: '$1=="yes" {print $2; exit}'
-)"
-
-if [ -z "${wifi_ssid:-}" ]; then
-  wifi_ssid="not connected"
-fi
-
-dicaffeine_state="$(
-  systemctl --user is-active dicaffeine 2>/dev/null || true
-)"
-
-if [ -z "$dicaffeine_state" ]; then
-  dicaffeine_state="unknown"
-fi
-
-echo "Host: ${host}"
-echo "Web:  ${web_url}"
-echo "WiFi: ${wifi_ssid}"
-echo "Dicaffeine: ${dicaffeine_state}"
-echo
-echo "IP addresses:"
-
-ip -o -4 addr show scope global 2>/dev/null |
-  awk '{
-    split($4, a, "/");
-    iface=$2;
-
-    short=iface;
-    if (short ~ /^en/) short="eth";
-    else if (short ~ /^wl/) short="wifi";
-    else if (short ~ /^tailscale/) short="ts";
-    else if (short ~ /^docker/) short="dock";
-    else if (short ~ /^br-/) short="br";
-    else if (length(short) > 8) short=substr(short,1,8);
-
-    printf "  %-6s %s\n", short ":", a[1]
-  }'
-
-if ! ip -o -4 addr show scope global 2>/dev/null | grep -q .; then
-  echo "  none"
-fi
-EOFSTATUS
-
-sudo chmod +x /usr/local/bin/wyse-ndi-status
 
 echo "== Installing AP start helper =="
 

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+systemctl --user stop pipewire-pulse.service pipewire-pulse.socket || true
+systemctl --user stop wireplumber.service || true
+systemctl --user stop pipewire.service pipewire.socket || true

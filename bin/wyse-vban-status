@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -f /etc/default/wyse-vban ]; then
+  # shellcheck disable=SC1091
+  . /etc/default/wyse-vban
+fi
+
+MANAGER_DIR="${VBAN_MANAGER_DIR:-/opt/vban-manager}"
+MANAGER_PORT="${VBAN_MANAGER_PORT:-8088}"
+VBAN_UDP_PORT="${VBAN_UDP_PORT:-6980}"
+DEFAULT_STREAM="${VBAN_STREAM_NAME:-Stream1}"
+DEFAULT_SENDER="${VBAN_SENDER_IP:-}"
+
+primary_ip="$(
+  ip -4 route get 1.1.1.1 2>/dev/null |
+    awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
+)"
+
+if [ -z "${primary_ip:-}" ]; then
+  primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+fi
+
+mgr_state="$(
+  systemctl --user is-active vban-manager-web.service 2>/dev/null || true
+)"
+
+if [ -z "$mgr_state" ]; then
+  mgr_state="not installed"
+fi
+
+if [ -n "${primary_ip:-}" ]; then
+  echo "Recv: ${primary_ip} udp/${VBAN_UDP_PORT}"
+else
+  echo "Recv: (no IP) udp/${VBAN_UDP_PORT}"
+fi
+
+if [ -n "${primary_ip:-}" ]; then
+  echo "Mgr:  http://${primary_ip}:${MANAGER_PORT}/ (${mgr_state})"
+else
+  echo "Mgr:  :${MANAGER_PORT}/ (${mgr_state})"
+fi
+
+python3 - "$MANAGER_DIR" "$DEFAULT_SENDER" "$DEFAULT_STREAM" "$VBAN_UDP_PORT" <<'PY'
+import glob
+import os
+import re
+import subprocess
+import sys
+
+manager_dir, default_sender, default_stream, default_port = sys.argv[1:5]
+script_dir = os.path.join(manager_dir, "script")
+
+def run(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return ""
+
+def parse_args(line):
+    tokens = line.strip().split()
+    if not tokens:
+        return None
+    if tokens[0] != "receptor":
+        return {"mode": tokens[0], "raw": line.strip()}
+
+    out = {"mode": "receptor", "sender": "", "port": default_port, "stream": default_stream, "backend": "", "device": ""}
+    i = 1
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in ("-i", "--ip") and i + 1 < len(tokens):
+            out["sender"] = tokens[i + 1]
+            i += 2
+            continue
+        if tok in ("-p", "--port") and i + 1 < len(tokens):
+            out["port"] = tokens[i + 1]
+            i += 2
+            continue
+        if tok in ("-s", "--streamname") and i + 1 < len(tokens):
+            out["stream"] = tokens[i + 1]
+            i += 2
+            continue
+        if tok in ("-b", "--backend") and i + 1 < len(tokens):
+            out["backend"] = tokens[i + 1]
+            i += 2
+            continue
+        if tok in ("-d", "--device") and i + 1 < len(tokens):
+            out["device"] = tokens[i + 1]
+            i += 2
+            continue
+        i += 1
+    return out
+
+streams = []
+if os.path.isdir(script_dir):
+    for path in sorted(glob.glob(os.path.join(script_dir, "args-*.txt"))):
+        stream_id = os.path.basename(path)[5:-4]
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                line = f.read().strip()
+        except OSError:
+            continue
+        if not line:
+            continue
+        parsed = parse_args(line)
+        if not parsed:
+            continue
+        active = run(["systemctl", "--user", "is-active", f"vban@{stream_id}.service"])
+        streams.append((stream_id, parsed, active or "inactive", line))
+
+if streams:
+    for stream_id, parsed, active, _raw in streams:
+        if parsed.get("mode") == "receptor":
+            sender = parsed.get("sender") or default_sender or "(set sender IP)"
+            stream = parsed.get("stream") or default_stream
+            port = parsed.get("port") or default_port
+            backend = parsed.get("backend") or "pulseaudio"
+            print(f"#{stream_id}: {stream}")
+            print(f"  from {sender}:{port}")
+            print(f"  {backend} · {active}")
+        else:
+            print(f"#{stream_id}: {parsed.get('mode', 'vban')} · {active}")
+else:
+    if default_sender:
+        print(f"Default: {default_stream}")
+        print(f"  from {default_sender}:{default_port}")
+    else:
+        print("No streams configured")
+        print(f"  default name: {default_stream}")
+PY

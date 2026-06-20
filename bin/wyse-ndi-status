@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_FILE="/run/wyse-wifi-setup/state"
+
+if [ -f /etc/default/wyse-wifi-setup ]; then
+  # shellcheck disable=SC1091
+  . /etc/default/wyse-wifi-setup
+fi
+
+if [ -f "$STATE_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$STATE_FILE" || true
+fi
+
+if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
+  if [ "${WYSE_WIFI_SETUP_CONNECTING:-0}" = "1" ]; then
+    echo "Wi-Fi Setup"
+    echo "Connecting to:"
+    echo "${WYSE_WIFI_SETUP_TARGET_SSID:-selected network}"
+    echo
+    echo "Setup AP may close."
+    exit 0
+  fi
+
+  echo "Wi-Fi Setup Mode"
+  echo "SSID: ${WYSE_WIFI_SETUP_SSID:-Dicaffeine-Setup}"
+  echo "Pass: ${WYSE_WIFI_SETUP_PASSPHRASE:-dicaffeine}"
+  echo "Open: http://${WYSE_WIFI_SETUP_GATEWAY:-192.168.44.1}/"
+  echo
+
+  if [ -n "${WYSE_WIFI_SETUP_ERROR:-}" ]; then
+    echo "Last error:"
+    echo "${WYSE_WIFI_SETUP_ERROR}"
+    echo
+  fi
+
+  echo "Scan QR to join setup Wi-Fi."
+  exit 0
+fi
+
+primary_ip="$(
+  ip -4 route get 1.1.1.1 2>/dev/null |
+    awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
+)"
+
+if [ -z "${primary_ip:-}" ]; then
+  primary_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+fi
+
+if [ -n "${primary_ip:-}" ]; then
+  web_url="http://${primary_ip}/"
+else
+  web_url="No network"
+fi
+
+host="$(hostname -s)"
+
+wifi_ssid="$(
+  nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null |
+    awk -F: '$1=="yes" {print $2; exit}'
+)"
+
+if [ -z "${wifi_ssid:-}" ]; then
+  wifi_ssid="not connected"
+fi
+
+dicaffeine_state="$(
+  systemctl --user is-active dicaffeine 2>/dev/null || true
+)"
+
+if [ -z "$dicaffeine_state" ]; then
+  dicaffeine_state="unknown"
+fi
+
+echo "Host: ${host}"
+echo "Web:  ${web_url}"
+echo "WiFi: ${wifi_ssid}"
+echo "Dicaffeine: ${dicaffeine_state}"
+echo
+echo "IP addresses:"
+
+ip -o -4 addr show scope global 2>/dev/null |
+  awk '{
+    split($4, a, "/");
+    iface=$2;
+
+    short=iface;
+    if (short ~ /^en/) short="eth";
+    else if (short ~ /^wl/) short="wifi";
+    else if (short ~ /^tailscale/) short="ts";
+    else if (short ~ /^docker/) short="dock";
+    else if (short ~ /^br-/) short="br";
+    else if (length(short) > 8) short=substr(short,1,8);
+
+    printf "  %-6s %s\n", short ":", a[1]
+  }'
+
+if ! ip -o -4 addr show scope global 2>/dev/null | grep -q .; then
+  echo "  none"
+fi

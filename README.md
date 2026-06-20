@@ -860,6 +860,58 @@ Select the source, save, and press Play.
 
 ---
 
+## Updating an Existing Wyse
+
+After copying or `git pull` an updated kit onto a box that is already working:
+
+```bash
+cd ~/wyse-ndi-kit
+./scripts/update-wyse-ndi.sh
+```
+
+This refreshes helpers, Conky overlays (including the VBAN status panel), Wi‑Fi portal scripts, and the VBAN layer if already installed. It does **not** reinstall Dicaffeine/Yuri `.deb` packages or change `/etc/dicaffeine/player.json`.
+
+To add VBAN to an existing NDI-only box:
+
+```bash
+sudo INSTALL_VBAN=1 ./scripts/update-wyse-ndi.sh
+```
+
+Edit `/etc/default/wyse-vban` for sender IP, stream name, and manager bind address. Set `VBAN_SENDER_IP` so the desktop overlay shows the expected VoiceMeeter source even before a stream is started in VBAN-manager.
+
+---
+
+## VBAN Pre-Service Audio
+
+VBAN runs alongside Dicaffeine when using the PulseAudio/PipeWire backend.
+
+Install (or update):
+
+```bash
+sudo APP_USER=ndi ./scripts/install-vban-manager-wyse.sh
+# UI: http://<wyse-ip>:8088/
+```
+
+Working receptor example:
+
+```bash
+vban_receptor -i <LAPTOP_IP> -p 6980 -s Stream1 -b pulseaudio -d "VBAN PreService" -q 1
+```
+
+- `-i` is the **sender** laptop IP, not `0.0.0.0`
+- Wyse onboard RT5672 analogue audio is unreliable; prefer USB audio for production
+- VBAN-manager has no authentication — set `VBAN_MANAGER_BIND` in `/etc/default/wyse-vban` to a LAN IP if desired
+
+Diagnostics:
+
+```bash
+wyse-vban-status
+vban-box-audio-info
+sudo tcpdump -ni any udp port 6980
+```
+
+---
+
 ## Final Architecture
 
 ```text

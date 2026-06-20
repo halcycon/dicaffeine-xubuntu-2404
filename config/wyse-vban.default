@@ -1,0 +1,19 @@
+# Wyse VBAN appliance defaults.
+# Edit on the box; re-running the kit update will not overwrite this file.
+
+# VBAN-manager web UI (user systemd: vban-manager-web.service)
+VBAN_MANAGER_DIR=/opt/vban-manager
+VBAN_MANAGER_PORT=8088
+# Bind address: 0.0.0.0 listens on all interfaces (LAN only in production).
+# Set to the Wyse LAN IP to limit exposure, e.g. 192.168.1.50
+VBAN_MANAGER_BIND=0.0.0.0
+
+# VoiceMeeter / VBAN receptor defaults (reference for operators and overlays)
+# vban_receptor -i uses the SENDER laptop IP, not 0.0.0.0
+VBAN_SENDER_IP=
+VBAN_UDP_PORT=6980
+VBAN_STREAM_NAME=Stream1
+VBAN_BACKEND=pulseaudio
+VBAN_PULSE_LABEL=VBAN PreService
+# For direct ALSA (stop PipeWire first): plughw:CARD=USB,DEV=0
+VBAN_ALSA_DEVICE=

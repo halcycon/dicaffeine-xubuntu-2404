@@ -1,0 +1,14 @@
+[Unit]
+Description=VBAN Manager lightweight web UI
+After=default.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@MANAGER_DIR@
+ExecStart=/usr/bin/php -S @BIND_ADDR@:@WEB_PORT@ -t @MANAGER_DIR@
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

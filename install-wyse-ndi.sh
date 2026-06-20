@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+UPDATE_MODE=0
+for arg in "$@"; do
+  case "$arg" in
+    --update) UPDATE_MODE=1 ;;
+  esac
+done
+UPDATE_MODE="${UPDATE_MODE:-0}"
+
 TARGET_USER="${SUDO_USER:-$USER}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 
@@ -10,6 +18,53 @@ if [ "$TARGET_USER" = "root" ]; then
 fi
 
 cd "$(dirname "$0")"
+
+if [ "$UPDATE_MODE" = "1" ]; then
+  echo "== Wyse NDI kit update mode =="
+  echo "Refreshing helpers, overlays, Wi-Fi portal, and optional VBAN layer."
+  echo "Skipping .deb installs, NDI links, and bootloader workarounds."
+  echo
+
+  UPDATE_MODE=1 ./scripts/install-common-helpers.sh
+
+  if [ "${INSTALL_DESKTOP_INFO_OVERLAY:-1}" = "1" ] && [ -x ./scripts/install-desktop-info-overlay.sh ]; then
+    UPDATE_MODE=1 ./scripts/install-desktop-info-overlay.sh
+  fi
+
+  if [ "${INSTALL_WIFI_SETUP_PORTAL:-1}" = "1" ] && [ -x ./scripts/install-wifi-setup-portal-native.sh ]; then
+    UPDATE_MODE=1 ./scripts/install-wifi-setup-portal-native.sh
+  fi
+
+  if [ -x ./scripts/merge-dicaffeine-config.sh ]; then
+    ./scripts/merge-dicaffeine-config.sh
+  fi
+
+  install_vban="${INSTALL_VBAN:-auto}"
+  if [ "$install_vban" = "auto" ]; then
+    if [ -d /opt/vban-manager ] || [ -d /opt/vban ] || command -v vban_receptor >/dev/null 2>&1; then
+      install_vban=1
+    else
+      install_vban=0
+    fi
+  fi
+
+  if [ "$install_vban" = "1" ] && [ -x ./scripts/install-vban-manager-wyse.sh ]; then
+    echo "== Updating VBAN layer =="
+    sudo UPDATE_MODE=1 APP_USER="$TARGET_USER" ./scripts/install-vban-manager-wyse.sh
+  else
+    echo "VBAN update skipped (set INSTALL_VBAN=1 to install/update VBAN)."
+  fi
+
+  if [ "${RESTART_DICAFFEINE:-0}" = "1" ]; then
+    sudo -u "$TARGET_USER" XDG_RUNTIME_DIR="/run/user/$(id -u "$TARGET_USER")" \
+      systemctl --user try-restart dicaffeine || true
+  fi
+
+  echo
+  echo "Update complete."
+  echo "Dicaffeine was not restarted unless RESTART_DICAFFEINE=1 was set."
+  exit 0
+fi
 
 find_required_deb_by_package() {
   local package="$1"
@@ -477,6 +532,19 @@ else
   echo "INSTALL_WIFI_SETUP_PORTAL=0; skipping Wi-Fi setup portal watcher."
 fi
 
+echo "== Installing optional VBAN / VBAN-manager layer =="
+
+install_vban="${INSTALL_VBAN:-0}"
+if [ "$install_vban" = "1" ]; then
+  if [ -x ./scripts/install-vban-manager-wyse.sh ]; then
+    sudo APP_USER="$TARGET_USER" ./scripts/install-vban-manager-wyse.sh
+  else
+    echo "VBAN installer not found; skipping."
+  fi
+else
+  echo "INSTALL_VBAN=0; skipping VBAN layer (set INSTALL_VBAN=1 to install)."
+fi
+
 echo "== Final sanity checks =="
 
 sudo ldconfig
@@ -489,11 +557,18 @@ ldd /usr/lib/yuri2/yuri2.8_module_sdl2_window.so | grep "not found" && exit 1 ||
 echo
 echo "Done."
 echo
+if [ "${INSTALL_VBAN:-0}" = "1" ]; then
+  echo "VBAN-manager should be on http://<wyse-ip>:8088/ after reboot."
+  echo
+fi
 echo "Reboot, then test:"
 echo "  ~/bin/list-ndi-sources.sh"
 echo
 echo "Dicaffeine web UI should be available on:"
 echo "  http://<wyse-ip>/"
+echo
+echo "To update an existing box later without reinstalling debs:"
+echo "  ./scripts/update-wyse-ndi.sh"
 echo
 echo "Manual fallback:"
 echo "  ~/bin/play-ndi-manual.sh 'EXACT NDI SOURCE NAME'"

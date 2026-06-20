@@ -1,0 +1,13 @@
+[Unit]
+Description=VBAN stream %i
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=@MANAGER_DIR@/script
+ExecStart=/bin/bash @MANAGER_DIR@/script/vban.sh start-service %i
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

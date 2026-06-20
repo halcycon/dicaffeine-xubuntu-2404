@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "== ALSA cards =="
+cat /proc/asound/cards || true
+
+echo
+echo "== ALSA playback devices =="
+aplay -l || true
+
+echo
+echo "== ALSA logical devices matching likely audio outputs =="
+aplay -L | grep -A3 -iE 'usb|uac|audio|rt5672|default|sysdefault|plughw|hw' || true
+
+echo
+echo "== PipeWire/Pulse sinks, if running =="
+pactl list short sinks 2>/dev/null || true
+
+echo
+echo "== Processes holding sound devices =="
+fuser -v /dev/snd/* 2>/dev/null || true
