@@ -42,7 +42,7 @@ if changed:
     backup.write_text(p.read_text())
     p.write_text(json.dumps(data, indent=4) + "\n")
     print(f"Merged keys into {p} (backup: {backup})")
-else
+else:
     print("dserver.json already has expected Wyse kit keys.")
 PY
 
