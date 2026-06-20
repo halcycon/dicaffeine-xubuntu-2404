@@ -37,4 +37,7 @@ if (!is_array($data)) {
 }
 
 $data['receiver_ip'] = wyse_primary_ip();
+if (!empty($data['streams']) && is_array($data['streams'])) {
+    wyse_save_scan_cache($port, $data['streams']);
+}
 echo json_encode($data);

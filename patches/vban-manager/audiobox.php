@@ -9,6 +9,15 @@ $status = wyse_server_status($slot);
 $current = wyse_read_server_args($slot);
 $receiverIp = wyse_primary_ip();
 $defaultPort = $defaults['VBAN_UDP_PORT'] !== '' ? $defaults['VBAN_UDP_PORT'] : '6980';
+$streamPlaceholder = 'Stream name (optional — auto-detected from packets)';
+$streamValue = '';
+if ($status === 'active' && !empty($current['s'])) {
+    $streamValue = $current['s'];
+}
+$cachedStreams = wyse_load_scan_cache($defaultPort);
+if ($streamValue === '' && is_array($cachedStreams) && !empty($cachedStreams[0]['stream'])) {
+    $streamPlaceholder = 'Detected: ' . $cachedStreams[0]['stream'];
+}
 
 include 'top.php';
 ?>
@@ -64,7 +73,7 @@ include 'top.php';
 
   <div class="wyse-card">
     <h5>Connect manually</h5>
-    <p class="wyse-muted mb-2">Sender IP is required. Leave stream name blank to auto-detect it from incoming VBAN packets.</p>
+    <p class="wyse-muted mb-2">Sender IP is required. Leave stream name blank to use the name from VBAN packets (recommended). Typed names are verified against incoming packets before connect.</p>
     <form class="form-inline" method="get" action="connect.php">
       <input type="hidden" name="id" value="<?php echo wyse_h($slot); ?>">
       <div class="form-group mr-2 mb-2">
@@ -76,8 +85,8 @@ include 'top.php';
       <div class="form-group mr-2 mb-2">
         <label class="sr-only" for="stream">Stream name (optional)</label>
         <input class="form-control" type="text" id="stream" name="stream"
-               placeholder="Stream name (optional)"
-               value="<?php echo wyse_h(isset($current['s']) ? $current['s'] : ''); ?>">
+               placeholder="<?php echo wyse_h($streamPlaceholder); ?>"
+               value="<?php echo wyse_h($streamValue); ?>">
       </div>
       <button class="btn btn-success mb-2" type="submit">Connect</button>
     </form>
@@ -186,6 +195,16 @@ include 'top.php';
           scanError.style.display = 'block';
         }
         renderResults(data.streams || []);
+        if (data.streams && data.streams.length) {
+          var senderInput = document.getElementById('sender');
+          var streamInput = document.getElementById('stream');
+          if (senderInput && !senderInput.value) {
+            senderInput.value = data.streams[0].sender;
+          }
+          if (streamInput && !streamInput.value) {
+            streamInput.placeholder = 'Detected: ' + data.streams[0].stream;
+          }
+        }
       })
       .catch(function (err) {
         scanError.textContent = 'Scan request failed: ' + err;

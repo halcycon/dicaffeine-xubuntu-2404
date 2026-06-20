@@ -6,6 +6,7 @@
 # Sender PC IP (VoiceMeeter). Used as manual-connect default, not 0.0.0.0.
 VBAN_SENDER_IP=
 VBAN_UDP_PORT=6980
+# Fallback label for overlay/advanced UI only — Connect reads the real name from VBAN packets.
 VBAN_STREAM_NAME=Stream1
 VBAN_SCAN_SECONDS=5
 VBAN_NETWORK_QUALITY=1

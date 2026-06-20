@@ -47,9 +47,10 @@ include 'top.php';
                  value="<?php echo wyse_h($config['VBAN_UDP_PORT']); ?>">
         </div>
         <div class="form-group col-md-4">
-          <label for="VBAN_STREAM_NAME">Default stream name</label>
+          <label for="VBAN_STREAM_NAME">Fallback stream name</label>
           <input class="form-control" name="VBAN_STREAM_NAME" id="VBAN_STREAM_NAME"
                  value="<?php echo wyse_h($config['VBAN_STREAM_NAME']); ?>">
+          <small class="form-text text-muted">Advanced UI and overlay only. Connect uses names from VBAN packets.</small>
         </div>
         <div class="form-group col-md-4">
           <label for="VBAN_SCAN_SECONDS">Scan seconds</label>

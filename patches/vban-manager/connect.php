@@ -18,6 +18,9 @@ if (isset($_GET['json']) || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['
 
 if ($result['ok']) {
     $message = 'Connected to ' . $result['stream'] . ' from ' . $result['sender'];
+    if (!empty($result['notice'])) {
+        $message .= '. ' . $result['notice'];
+    }
 } else {
     $message = $result['error'];
 }

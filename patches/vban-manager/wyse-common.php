@@ -295,6 +295,180 @@ function wyse_scan_streams($port, $seconds, $sender_filter = '')
     return $data;
 }
 
+function wyse_scan_cache_path()
+{
+    return wyse_script_dir() . '/last-scan.json';
+}
+
+function wyse_save_scan_cache($port, $streams)
+{
+    $payload = array(
+        'time' => time(),
+        'port' => (int)$port,
+        'streams' => is_array($streams) ? $streams : array(),
+    );
+    file_put_contents(wyse_scan_cache_path(), json_encode($payload), LOCK_EX);
+}
+
+function wyse_load_scan_cache($port, $maxAgeSeconds = 120)
+{
+    $file = wyse_scan_cache_path();
+    if (!is_readable($file)) {
+        return null;
+    }
+
+    $data = json_decode(file_get_contents($file), true);
+    if (!is_array($data) || !isset($data['time'], $data['streams']) || !is_array($data['streams'])) {
+        return null;
+    }
+    if ((int)$data['port'] !== (int)$port) {
+        return null;
+    }
+    if (time() - (int)$data['time'] > $maxAgeSeconds) {
+        return null;
+    }
+
+    return $data['streams'];
+}
+
+function wyse_merge_scan_streams()
+{
+    $merged = array();
+    $seen = array();
+
+    foreach (func_get_args() as $streams) {
+        if (!is_array($streams)) {
+            continue;
+        }
+        foreach ($streams as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $key = ($item['sender'] ?? '') . '|' . ($item['stream'] ?? '') . '|' . ($item['port'] ?? '');
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $merged[] = $item;
+        }
+    }
+
+    usort($merged, function ($a, $b) {
+        return strcmp(
+            ($a['sender'] ?? '') . ($a['stream'] ?? ''),
+            ($b['sender'] ?? '') . ($b['stream'] ?? '')
+        );
+    });
+
+    return $merged;
+}
+
+function wyse_streams_for_sender($streams, $sender)
+{
+    if ($sender === '') {
+        return $streams;
+    }
+
+    $filtered = array();
+    foreach ($streams as $item) {
+        if (($item['sender'] ?? '') === $sender) {
+            $filtered[] = $item;
+        }
+    }
+    return $filtered;
+}
+
+function wyse_resolve_stream_name($sender, $requestedStream, $port, $defaults)
+{
+    $requestedStream = trim($requestedStream);
+    $sender = trim($sender);
+
+    if ($port === '') {
+        $port = $defaults['VBAN_UDP_PORT'] !== '' ? $defaults['VBAN_UDP_PORT'] : '6980';
+    }
+
+    $scanSeconds = $defaults['VBAN_SCAN_SECONDS'] !== '' ? (float)$defaults['VBAN_SCAN_SECONDS'] : 5.0;
+    if ($requestedStream !== '') {
+        $scanSeconds = min($scanSeconds, 3.0);
+    }
+
+    $cached = wyse_load_scan_cache($port);
+    $live = wyse_scan_streams($port, $scanSeconds, $sender);
+    if (!empty($live['error']) && empty($live['streams']) && empty($cached)) {
+        return array('error' => 'Could not scan for VBAN streams: ' . $live['error']);
+    }
+
+    $streams = wyse_merge_scan_streams($cached, $live['streams'] ?? array());
+    if ($sender !== '') {
+        $streams = wyse_streams_for_sender($streams, $sender);
+    }
+
+    if (empty($streams)) {
+        if ($requestedStream !== '') {
+            return array(
+                'error' => 'No VBAN packets heard from '
+                    . ($sender !== '' ? $sender : 'any sender')
+                    . ' on port ' . $port
+                    . '. Cannot verify stream name "'
+                    . $requestedStream
+                    . '". Start VoiceMeeter output and use Scan first.',
+            );
+        }
+        return array(
+            'error' => 'No VBAN stream heard on port ' . $port
+                . '. Start VoiceMeeter VBAN output to this device, then use Scan or enter the sender IP and leave stream name blank.',
+        );
+    }
+
+    if ($sender === '') {
+        $sender = $streams[0]['sender'];
+    }
+
+    if ($requestedStream !== '') {
+        foreach ($streams as $item) {
+            if (($item['stream'] ?? '') === $requestedStream) {
+                return array(
+                    'sender' => $sender,
+                    'stream' => $requestedStream,
+                    'notice' => null,
+                );
+            }
+        }
+
+        if (count($streams) === 1) {
+            $detected = $streams[0]['stream'];
+            return array(
+                'sender' => $sender,
+                'stream' => $detected,
+                'notice' => 'Used stream name "' . $detected . '" from VBAN packets instead of "' . $requestedStream . '".',
+            );
+        }
+
+        $names = array();
+        foreach ($streams as $item) {
+            $names[] = '"' . ($item['stream'] ?? '') . '"';
+        }
+        return array(
+            'error' => 'Stream name "' . $requestedStream . '" was not seen in VBAN packets from '
+                . $sender . '. Detected: ' . implode(', ', $names) . '. Names are case-sensitive.',
+        );
+    }
+
+    if (count($streams) === 1) {
+        return array(
+            'sender' => $sender,
+            'stream' => $streams[0]['stream'],
+            'notice' => null,
+        );
+    }
+
+    return array(
+        'sender' => $sender,
+        'stream' => $streams[0]['stream'],
+        'notice' => 'Multiple streams heard; connected to "' . $streams[0]['stream'] . '".',
+    );
+}
+
 function wyse_wait_service($id, $timeout = 8.0)
 {
     $deadline = microtime(true) + $timeout;
@@ -364,43 +538,26 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
     usleep(300000);
     shell_exec(wyse_user_env_prefix() . ' systemctl --user reset-failed ' . escapeshellarg('vban@' . $id . '.service') . ' 2>/dev/null');
 
-    if ($stream === '') {
-        $seconds = $defaults['VBAN_SCAN_SECONDS'] !== '' ? (float)$defaults['VBAN_SCAN_SECONDS'] : 5.0;
-        $scan = wyse_scan_streams($port, $seconds, $sender);
-        if (!empty($scan['error']) && empty($scan['streams'])) {
-            return 'Could not scan for VBAN streams: ' . $scan['error'];
-        }
-
-        $streams = $scan['streams'] ?? array();
-        if (empty($streams)) {
-            return 'No VBAN stream heard on port ' . $port . '. Start VoiceMeeter VBAN output to this device, then use Scan or enter the stream name manually.';
-        }
-
-        $chosen = $streams[0];
-        if ($sender !== '') {
-            foreach ($streams as $item) {
-                if ($item['sender'] === $sender) {
-                    $chosen = $item;
-                    break;
-                }
-            }
-        } else {
-            $sender = $chosen['sender'];
-        }
-        $stream = $chosen['stream'];
+    $resolved = wyse_resolve_stream_name($sender, $stream, $port, $defaults);
+    if (isset($resolved['error'])) {
+        return array('error' => $resolved['error'], 'notice' => null);
     }
 
+    $sender = $resolved['sender'];
+    $stream = $resolved['stream'];
+    $notice = isset($resolved['notice']) ? $resolved['notice'] : null;
+
     if ($sender === '') {
-        return 'Sender IP is required when the stream name is entered manually.';
+        return array('error' => 'Sender IP is required when the stream name is entered manually.', 'notice' => null);
     }
 
     $line = wyse_build_receptor_line($sender, $stream, $port, $defaults);
     $argsFile = wyse_args_path($id);
     if (file_put_contents($argsFile, $line . "\n", LOCK_EX) === false) {
-        return 'Could not write stream config to ' . $argsFile . '. Check permissions on /opt/vban-manager/script/.';
+        return array('error' => 'Could not write stream config to ' . $argsFile . '. Check permissions on /opt/vban-manager/script/.', 'notice' => null);
     }
     if (!is_readable($argsFile)) {
-        return 'Stream config was not saved (' . $argsFile . ' missing after write).';
+        return array('error' => 'Stream config was not saved (' . $argsFile . ' missing after write).', 'notice' => null);
     }
 
     wyse_prepare_audio($defaults);
@@ -410,27 +567,30 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
     if ($final !== 'active') {
         $log = wyse_service_journal($id, 8);
         if (stripos($log, 'Missing args-') !== false) {
-            return 'VBAN args file missing at ' . $argsFile . '. Update the kit and try Connect again.';
+            return array('error' => 'VBAN args file missing at ' . $argsFile . '. Update the kit and try Connect again.', 'notice' => null);
         }
         $hint = 'Stream name must match VoiceMeeter exactly (case-sensitive).';
         if ($log !== '') {
-            return 'VBAN receptor exited (' . $final . '). ' . $hint . ' Log: ' . preg_replace('/\s+/', ' ', $log);
+            return array('error' => 'VBAN receptor exited (' . $final . '). ' . $hint . ' Log: ' . preg_replace('/\s+/', ' ', $log), 'notice' => null);
         }
-        return 'VBAN receptor did not stay running (' . $final . '). ' . $hint;
+        return array('error' => 'VBAN receptor did not stay running (' . $final . '). ' . $hint, 'notice' => null);
     }
 
-    return null;
+    return array('error' => null, 'notice' => $notice);
 }
 
 function wyse_connect_result($id, $sender, $stream, $port, $defaults)
 {
-    $error = wyse_connect_stream($id, $sender, $stream, $port, $defaults);
+    $connect = wyse_connect_stream($id, $sender, $stream, $port, $defaults);
+    $error = $connect['error'] ?? 'Connect failed.';
+    $notice = $connect['notice'] ?? null;
     $argsParsed = wyse_read_server_args($id);
     $state = wyse_server_status($id);
 
     return array(
         'ok' => $error === null,
         'error' => $error,
+        'notice' => $notice,
         'state' => $state,
         'sender' => isset($argsParsed['i']) ? $argsParsed['i'] : $sender,
         'stream' => isset($argsParsed['s']) ? $argsParsed['s'] : $stream,

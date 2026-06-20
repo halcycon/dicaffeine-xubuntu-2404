@@ -87,7 +87,9 @@ include 'top.php';
     <div class="form-group">
       <label for="s">Stream name</label>
       <input class="form-control" name="s" id="s" type="text"
-             value="<?php echo wyse_h(isset($argsParsed['s']) ? $argsParsed['s'] : $defaults['VBAN_STREAM_NAME']); ?>">
+             placeholder="Use AudioBox Scan/Connect to detect from VBAN packets"
+             value="<?php echo wyse_h(isset($argsParsed['s']) ? $argsParsed['s'] : ''); ?>">
+      <small class="form-text text-muted">Must match VoiceMeeter exactly. Prefer AudioBox Connect, which verifies against incoming packets.</small>
     </div>
 
     <details class="wyse-card">
