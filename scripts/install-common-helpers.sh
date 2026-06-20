@@ -82,6 +82,7 @@ for helper in \
   wyse-vban-scan \
   wyse-vban-parse-args \
   wyse-vban-audio-devices \
+  wyse-vban-audio-levels \
   wyse-vban-save-config \
   vban-box-audio-info \
   vban-box-stop-pipewire \

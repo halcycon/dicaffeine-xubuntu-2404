@@ -1,14 +1,35 @@
 <?php
 include 'config.php';
+include 'wyse-common.php';
 
-$command = $script_sh . " args " . $_POST['nb'] . " " . $_POST['type'];
-foreach ($_POST as $key => $value) {
-    if (strlen($key) == 1 && strlen($value) != "") {
-        $command .= " -" . $key . " " . $value;
-    }
+$id = isset($_POST['nb']) ? trim($_POST['nb']) : '';
+$type = isset($_POST['type']) ? trim($_POST['type']) : 'receptor';
+
+if ($id === '') {
+    header('Location: audiobox.php?message=' . urlencode('Missing server id.'));
+    exit;
 }
-chdir($script);
-shell_exec($command . " > /dev/null 2>&1 &");
 
-header("Refresh: 0;url=server.php?id=" . $_POST['nb'] . "&message=Arguments+changed!");
-?>
+$keys = array('i', 's', 'p', 'b', 'd', 'q', 'c', 'l', 'r', 'n', 'f');
+$parts = array($type);
+foreach ($keys as $key) {
+    if (!isset($_POST[$key])) {
+        continue;
+    }
+    $value = trim((string)$_POST[$key]);
+    if ($value === '') {
+        continue;
+    }
+    $parts[] = '-' . $key;
+    $parts[] = wyse_quote_arg($value);
+}
+
+$line = implode(' ', $parts);
+$argsFile = wyse_args_path($id);
+if (file_put_contents($argsFile, $line . "\n", LOCK_EX) === false) {
+    header('Location: server.php?id=' . urlencode($id) . '&message=' . urlencode('Could not save args file.'));
+    exit;
+}
+
+header('Location: server.php?id=' . urlencode($id) . '&message=' . urlencode('Settings saved.'));
+exit;

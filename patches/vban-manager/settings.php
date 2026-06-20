@@ -10,10 +10,8 @@ $devices = wyse_list_audio_devices();
 include 'top.php';
 ?>
 
-<link href="css/wyse-audiobox.css" rel="stylesheet">
-
-<div class="col-md-8">
-  <h3>AudioBox settings</h3>
+<div class="col-12 wyse-page">
+  <h3>Settings</h3>
   <p class="wyse-muted">
     Stored in <code><?php echo wyse_h(wyse_config_path()); ?></code>.
     These defaults apply to Scan, Connect, and the desktop overlay.

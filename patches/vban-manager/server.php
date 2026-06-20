@@ -5,32 +5,17 @@ include 'wyse-common.php';
 $page = 'server';
 $defaults = wyse_load_defaults();
 
-function after($needle, $haystack)
-{
-    if (!is_bool(strpos($haystack, $needle))) {
-        return substr($haystack, strpos($haystack, $needle) + strlen($needle));
-    }
-    return '';
-}
-
-function before($needle, $haystack)
-{
-    return substr($haystack, 0, strpos($haystack, $needle));
-}
-
 $id = $_GET['id'];
 $argsfile = wyse_args_path($id);
 
 if (!isset($_GET['new'])) {
-    $argscontent = file_get_contents($argsfile);
-    $type = before(' ', $argscontent);
-    $arguments = after(' ', $argscontent);
-
-    preg_match_all('/-([a-z]) ([^ ]+) /', $arguments . ' ', $argsar);
-    $argsParsed = array();
-    for ($i = 0; $i < count($argsar[1]); $i++) {
-        $argsParsed[$argsar[1][$i]] = $argsar[2][$i];
+    if (!is_readable($argsfile)) {
+        header('Location: audiobox.php?message=' . urlencode('Server #' . $id . ' is not configured yet.'));
+        exit;
     }
+    $argsParsed = wyse_read_server_args($id);
+    $type = isset($argsParsed['type']) ? $argsParsed['type'] : 'receptor';
+    unset($argsParsed['type'], $argsParsed['raw']);
 } else {
     $type = 'receptor';
     $argsParsed = array(
@@ -47,9 +32,7 @@ $defaultPort = $defaults['VBAN_UDP_PORT'] !== '' ? $defaults['VBAN_UDP_PORT'] : 
 include 'top.php';
 ?>
 
-<link href="css/wyse-audiobox.css" rel="stylesheet">
-
-<div class="col-md-8">
+<div class="col-12 wyse-page">
   <h3>Server #<?php echo wyse_h($id); ?></h3>
   <p class="wyse-muted"><a href="audiobox.php">&larr; Back to AudioBox</a></p>
 

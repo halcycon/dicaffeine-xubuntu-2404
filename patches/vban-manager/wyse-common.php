@@ -603,3 +603,67 @@ function wyse_h($value)
 {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
+
+function wyse_pulse_label($defaults, $args = array())
+{
+    if (!empty($args['d'])) {
+        return $args['d'];
+    }
+    if (!empty($defaults['VBAN_PULSE_LABEL'])) {
+        return $defaults['VBAN_PULSE_LABEL'];
+    }
+    return 'VBAN AudioBox';
+}
+
+function wyse_server_nav_label($id)
+{
+    $args = wyse_read_server_args($id);
+    $state = wyse_server_status($id);
+    $prefix = $state === 'active' ? '● ' : '';
+
+    if (!empty($args['i']) && !empty($args['s'])) {
+        return $prefix . $args['i'] . ' · ' . $args['s'];
+    }
+    if (!empty($args['s'])) {
+        return $prefix . $args['s'];
+    }
+    if (!empty($args['i'])) {
+        return $prefix . $args['i'];
+    }
+
+    return $prefix . 'Server #' . $id;
+}
+
+function wyse_audio_levels($pulseLabel = '')
+{
+    $cmd = '/usr/local/bin/wyse-vban-audio-levels ' . escapeshellarg($pulseLabel !== '' ? $pulseLabel : 'VBAN AudioBox');
+    $json = trim(shell_exec(wyse_user_env_prefix() . ' ' . $cmd . ' 2>&1') ?? '');
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return array('ok' => false, 'error' => 'Could not read audio levels.');
+    }
+    return $data;
+}
+
+function wyse_set_sink_volume($percent)
+{
+    $percent = max(0, min(150, (int)$percent));
+    shell_exec(wyse_user_env_prefix() . ' pactl set-sink-volume @DEFAULT_SINK@ ' . (int)$percent . '% 2>/dev/null');
+}
+
+function wyse_set_stream_volume($index, $percent)
+{
+    $index = (int)$index;
+    $percent = max(0, min(150, (int)$percent));
+    if ($index <= 0) {
+        return;
+    }
+    shell_exec(
+        wyse_user_env_prefix()
+        . ' pactl set-sink-input-volume '
+        . $index
+        . ' '
+        . (int)$percent
+        . '% 2>/dev/null'
+    );
+}

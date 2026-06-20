@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""Report Pulse/PipeWire output levels and VBAN stream volume as JSON."""
+
+import json
+import os
+import re
+import subprocess
+import sys
+
+
+def run(cmd):
+    env = os.environ.copy()
+    uid = os.getuid()
+    runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
+    env.setdefault("XDG_RUNTIME_DIR", runtime)
+    env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={runtime}/bus")
+    env.setdefault("PULSE_SERVER", f"unix:{runtime}/pulse/native")
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL, env=env)
+    except Exception:
+        return ""
+
+
+def parse_percent(block, field):
+    match = re.search(rf"{field}:.*?(\d+)%", block)
+    return int(match.group(1)) if match else 0
+
+
+def parse_peak(block):
+    values = []
+    for match in re.finditer(r"Peak:\s*(?:front-left:\s*)?([0-9.]+)", block):
+        values.append(float(match.group(1)))
+    for match in re.finditer(r"front-right:\s*([0-9.]+)", block):
+        values.append(float(match.group(1)))
+    if values:
+        return max(values)
+    return None
+
+
+def parse_peaks_stereo(block):
+    left = None
+    right = None
+    stereo = re.search(
+        r"Peak:\s*front-left:\s*([0-9.]+),\s*front-right:\s*([0-9.]+)",
+        block,
+    )
+    if stereo:
+        return float(stereo.group(1)), float(stereo.group(2))
+    simple = re.search(r"Peak:\s*([0-9.]+)", block)
+    if simple:
+        value = float(simple.group(1))
+        return value, value
+    return left, right
+
+
+def parse_mute(block, field="Mute"):
+    match = re.search(rf"{field}:\s*(yes|no)", block)
+    return match.group(1) == "yes" if match else False
+
+
+def split_blocks(text, header):
+    blocks = []
+    for part in text.split(header):
+        if not part.strip():
+            continue
+        first_line, _, rest = part.partition("\n")
+        index = first_line.strip()
+        if not index.isdigit():
+            continue
+        blocks.append((int(index), rest))
+    return blocks
+
+
+def find_stream_input(label_hint):
+    detail = run(["pactl", "list", "sink-inputs"])
+    if not detail:
+        return None
+
+    label_hint = (label_hint or "").strip().lower()
+    candidates = []
+
+    for index, block in split_blocks(detail, "Sink Input #"):
+        media_match = re.search(r'media\.name = "([^"]*)"', block)
+        app_match = re.search(r'application\.name = "([^"]*)"', block)
+        media_name = media_match.group(1) if media_match else ""
+        app_name = app_match.group(1) if app_match else ""
+        peak_left, peak_right = parse_peaks_stereo(block)
+        item = {
+            "index": index,
+            "media_name": media_name,
+            "application_name": app_name,
+            "volume_percent": parse_percent(block, "Volume"),
+            "muted": parse_mute(block),
+            "peak_left": peak_left,
+            "peak_right": peak_right,
+        }
+        candidates.append(item)
+
+        score = 0
+        if label_hint and label_hint in media_name.lower():
+            score += 3
+        if label_hint and label_hint in app_name.lower():
+            score += 2
+        if "vban" in app_name.lower() or "vban" in media_name.lower():
+            score += 2
+        item["_score"] = score
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item.get("_score", 0), reverse=True)
+    best = candidates[0]
+    if best.get("_score", 0) == 0 and label_hint:
+        return None
+    best.pop("_score", None)
+    return best
+
+
+def find_default_sink():
+    detail = run(["pactl", "list", "sinks"])
+    default_name = run(["pactl", "get-default-sink"]).strip()
+    if not detail or not default_name:
+        return None
+
+    for index, block in split_blocks(detail, "Sink #"):
+        name_match = re.search(r"Name:\s*(.+)", block)
+        desc_match = re.search(r"Description:\s*(.+)", block)
+        name = name_match.group(1).strip() if name_match else ""
+        if name != default_name:
+            continue
+        peak_left, peak_right = parse_peaks_stereo(block)
+        return {
+            "index": index,
+            "name": name,
+            "description": desc_match.group(1).strip() if desc_match else name,
+            "default": True,
+            "volume_percent": parse_percent(block, "Volume"),
+            "muted": parse_mute(block),
+            "peak_left": peak_left,
+            "peak_right": peak_right,
+        }
+
+    return None
+
+
+def main():
+    label_hint = sys.argv[1] if len(sys.argv) > 1 else "VBAN AudioBox"
+    stream = find_stream_input(label_hint)
+    sink = find_default_sink()
+
+    connected = stream is not None
+    stream_peak = 0.0
+    if stream:
+        peaks = [p for p in (stream.get("peak_left"), stream.get("peak_right")) if p is not None]
+        stream_peak = max(peaks) if peaks else stream.get("volume_percent", 0) / 100.0
+
+    sink_peak = 0.0
+    if sink:
+        peaks = [p for p in (sink.get("peak_left"), sink.get("peak_right")) if p is not None]
+        sink_peak = max(peaks) if peaks else sink.get("volume_percent", 0) / 100.0
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "connected": connected,
+                "stream": stream,
+                "sink": sink,
+                "levels": {
+                    "stream_peak": round(stream_peak, 4),
+                    "sink_peak": round(sink_peak, 4),
+                },
+            }
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

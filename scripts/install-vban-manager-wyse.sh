@@ -139,12 +139,17 @@ for patch_file in \
   settings.php \
   save-settings.php \
   audio-devices.php \
+  audio-levels-api.php \
+  volume-api.php \
+  bottom.php \
   wyse-common.php
 do
   install_patch_file "${patch_file}"
 done
 
 install_patch_file "css/wyse-audiobox.css"
+install -d -o "${APP_USER}" -g "${APP_USER}" "${MANAGER_DIR}/js"
+install -o "${APP_USER}" -g "${APP_USER}" -m 0644 "${PATCH_DIR}/js/wyse-app.js" "${MANAGER_DIR}/js/wyse-app.js"
 install -o "${APP_USER}" -g "${APP_USER}" -m 0755 "${PATCH_DIR}/vban.sh" "${MANAGER_DIR}/script/vban.sh"
 
 nested_args="${MANAGER_DIR}/script/script"

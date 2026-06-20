@@ -22,16 +22,15 @@ if ($streamValue === '' && is_array($cachedStreams) && !empty($cachedStreams[0][
 include 'top.php';
 ?>
 
-<link href="css/wyse-audiobox.css" rel="stylesheet">
-
-<div class="col-md-8">
-  <h3>VBAN AudioBox</h3>
-  <p class="wyse-muted">
-    Receive VBAN audio on this device. VoiceMeeter should send to
-    <strong><?php echo wyse_h($receiverIp !== '' ? $receiverIp : 'this device'); ?></strong>
-    on UDP port <strong><?php echo wyse_h($defaultPort); ?></strong>.
-    Stream names are read from the VBAN packet header when you scan.
-  </p>
+<div class="col-12 wyse-page">
+  <div class="wyse-hero">
+    <h3>Dashboard</h3>
+    <p class="wyse-muted mb-0">
+      Receive VBAN audio on
+      <strong><?php echo wyse_h($receiverIp !== '' ? $receiverIp : 'this device'); ?></strong>
+      · UDP <?php echo wyse_h($defaultPort); ?>
+    </p>
+  </div>
 
   <div class="wyse-card" id="current-stream-card">
     <h5>Current stream</h5>
@@ -57,11 +56,41 @@ include 'top.php';
     </div>
   </div>
 
+  <div class="wyse-card" id="audio-panel" style="<?php echo $status === 'active' ? '' : 'display:none;'; ?>">
+    <h5>Audio levels &amp; volume</h5>
+    <div class="wyse-meter-grid">
+      <div class="wyse-meter-block">
+        <label>VBAN stream</label>
+        <div class="wyse-meter">
+          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="stream-meter-l"></div></div>
+          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="stream-meter-r"></div></div>
+        </div>
+      </div>
+      <div class="wyse-meter-block">
+        <label>System output</label>
+        <div class="wyse-meter">
+          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="sink-meter-l"></div></div>
+          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="sink-meter-r"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="wyse-volume-controls">
+      <div class="wyse-volume-row">
+        <label for="stream-volume"><span>Stream volume</span><span id="stream-vol-label">100%</span></label>
+        <input type="range" id="stream-volume" min="0" max="150" step="1" value="100">
+      </div>
+      <div class="wyse-volume-row">
+        <label for="sink-volume"><span>Output volume</span><span id="sink-vol-label">100%</span></label>
+        <input type="range" id="sink-volume" min="0" max="150" step="1" value="100">
+      </div>
+    </div>
+    <p class="wyse-muted mb-0 mt-3" id="audio-panel-note">Peaks come from PipeWire when available; sliders adjust PulseAudio volume.</p>
+  </div>
+
   <div class="wyse-card">
     <h5>Find streams on the network</h5>
     <p class="wyse-muted">
-      Start VBAN output on the sender first, then scan. Each VBAN audio packet carries the stream name in its header.
-      Scanning briefly stops any active playback on this device.
+      Start VBAN output on the sender first, then scan. Stream names are read from packet headers.
     </p>
     <button id="scan-btn" class="btn btn-primary" type="button">Scan for streams</button>
     <div id="scan-progress" class="wyse-scan-progress wyse-muted mt-3">
@@ -73,30 +102,24 @@ include 'top.php';
 
   <div class="wyse-card">
     <h5>Connect manually</h5>
-    <p class="wyse-muted mb-2">Sender IP is required. Leave stream name blank to use the name from VBAN packets (recommended). Typed names are verified against incoming packets before connect.</p>
-    <form class="form-inline" method="get" action="connect.php">
+    <p class="wyse-muted mb-2">Sender IP is required. Leave stream name blank to use the name from VBAN packets.</p>
+    <form class="wyse-form-grid" method="get" action="connect.php">
       <input type="hidden" name="id" value="<?php echo wyse_h($slot); ?>">
-      <div class="form-group mr-2 mb-2">
+      <div class="form-group mb-0">
         <label class="sr-only" for="sender">Sender IP</label>
         <input class="form-control" type="text" id="sender" name="sender"
                placeholder="Sender IP" required
                value="<?php echo wyse_h(isset($current['i']) ? $current['i'] : $defaults['VBAN_SENDER_IP']); ?>">
       </div>
-      <div class="form-group mr-2 mb-2">
+      <div class="form-group mb-0">
         <label class="sr-only" for="stream">Stream name (optional)</label>
         <input class="form-control" type="text" id="stream" name="stream"
                placeholder="<?php echo wyse_h($streamPlaceholder); ?>"
                value="<?php echo wyse_h($streamValue); ?>">
       </div>
-      <button class="btn btn-success mb-2" type="submit">Connect</button>
+      <button class="btn btn-success" type="submit">Connect</button>
     </form>
   </div>
-
-  <p class="wyse-muted">
-    <a href="settings.php">Settings</a>
-    &middot;
-    <a href="server.php?id=<?php echo wyse_h($slot); ?>">Advanced server</a>
-  </p>
 </div>
 
 <script>
@@ -107,7 +130,14 @@ include 'top.php';
   var scanResults = document.getElementById('scan-results');
   var scanError = document.getElementById('scan-error');
   var currentBody = document.getElementById('current-stream-body');
+  var audioPanel = document.getElementById('audio-panel');
   var defaultPort = <?php echo json_encode($defaultPort); ?>;
+  var streamVolume = document.getElementById('stream-volume');
+  var sinkVolume = document.getElementById('sink-volume');
+  var streamVolLabel = document.getElementById('stream-vol-label');
+  var sinkVolLabel = document.getElementById('sink-vol-label');
+  var isActive = <?php echo json_encode($status === 'active'); ?>;
+  var volumeTimers = { stream: null, sink: null };
 
   function escapeHtml(value) {
     return String(value)
@@ -117,12 +147,79 @@ include 'top.php';
       .replace(/"/g, '&quot;');
   }
 
+  function setMeter(id, value) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+    el.style.height = pct + '%';
+  }
+
+  function updateVolumeLabels() {
+    if (streamVolLabel && streamVolume) {
+      streamVolLabel.textContent = streamVolume.value + '%';
+    }
+    if (sinkVolLabel && sinkVolume) {
+      sinkVolLabel.textContent = sinkVolume.value + '%';
+    }
+  }
+
+  function postVolume(action, percent) {
+    var body = 'action=' + encodeURIComponent(action) + '&percent=' + encodeURIComponent(String(percent)) + '&id=' + encodeURIComponent(slot);
+    return fetch('volume-api.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body
+    }).then(function (response) { return response.json(); });
+  }
+
+  function debounceVolume(action, value, key) {
+    if (volumeTimers[key]) {
+      clearTimeout(volumeTimers[key]);
+    }
+    volumeTimers[key] = setTimeout(function () {
+      postVolume(action, value).catch(function () {});
+    }, 120);
+  }
+
+  function pollLevels() {
+    if (!isActive) return;
+    fetch('audio-levels-api.php?id=' + encodeURIComponent(slot))
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!data.ok) return;
+        var streamPeak = data.levels ? data.levels.stream_peak : 0;
+        var sinkPeak = data.levels ? data.levels.sink_peak : 0;
+        var streamPeakL = data.stream && data.stream.peak_left != null ? data.stream.peak_left : streamPeak;
+        var streamPeakR = data.stream && data.stream.peak_right != null ? data.stream.peak_right : streamPeak;
+        var sinkPeakL = data.sink && data.sink.peak_left != null ? data.sink.peak_left : sinkPeak;
+        var sinkPeakR = data.sink && data.sink.peak_right != null ? data.sink.peak_right : sinkPeak;
+        setMeter('stream-meter-l', streamPeakL);
+        setMeter('stream-meter-r', streamPeakR);
+        setMeter('sink-meter-l', sinkPeakL);
+        setMeter('sink-meter-r', sinkPeakR);
+        if (data.stream && streamVolume && document.activeElement !== streamVolume) {
+          streamVolume.value = String(data.stream.volume_percent || 100);
+        }
+        if (data.sink && sinkVolume && document.activeElement !== sinkVolume) {
+          sinkVolume.value = String(data.sink.volume_percent || 100);
+        }
+        updateVolumeLabels();
+      })
+      .catch(function () {});
+  }
+
   function renderCurrent(data) {
+    isActive = data.state === 'active';
+    if (audioPanel) {
+      audioPanel.style.display = isActive ? '' : 'none';
+    }
+
     if (data.state === 'active' && data.stream && data.sender) {
       currentBody.innerHTML =
         '<p class="wyse-status-active mb-1">Playing <strong>' + escapeHtml(data.stream) + '</strong> from ' +
         escapeHtml(data.sender) + ':' + escapeHtml(String(data.port || defaultPort)) + '</p>' +
         '<a class="btn btn-danger btn-sm" href="disconnect.php?id=' + encodeURIComponent(slot) + '">Stop</a>';
+      pollLevels();
       return;
     }
     if (data.state === 'activating') {
@@ -181,6 +278,19 @@ include 'top.php';
     });
   }
 
+  if (streamVolume) {
+    streamVolume.addEventListener('input', function () {
+      updateVolumeLabels();
+      debounceVolume('set_stream', streamVolume.value, 'stream');
+    });
+  }
+  if (sinkVolume) {
+    sinkVolume.addEventListener('input', function () {
+      updateVolumeLabels();
+      debounceVolume('set_sink', sinkVolume.value, 'sink');
+    });
+  }
+
   scanBtn.addEventListener('click', function () {
     scanBtn.disabled = true;
     scanProgress.classList.add('active');
@@ -217,7 +327,12 @@ include 'top.php';
   });
 
   setInterval(pollStatus, 2500);
+  setInterval(pollLevels, 180);
   pollStatus();
+  updateVolumeLabels();
+  if (isActive) {
+    pollLevels();
+  }
 })();
 </script>
 
