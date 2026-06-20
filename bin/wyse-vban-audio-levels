@@ -1,61 +1,75 @@
 #!/usr/bin/env python3
-"""Report Pulse/PipeWire output levels and VBAN stream volume as JSON."""
+"""Lightweight Pulse volume + VBAN stream presence (avoids heavy pactl list polling)."""
 
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
+import time
+
+CACHE_TTL = 120
 
 
-def run(cmd):
-    env = os.environ.copy()
+def runtime_dir():
     uid = os.getuid()
-    runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
+    return os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{uid}"
+
+
+def pulse_env():
+    env = os.environ.copy()
+    runtime = runtime_dir()
     env.setdefault("XDG_RUNTIME_DIR", runtime)
     env.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path={runtime}/bus")
     env.setdefault("PULSE_SERVER", f"unix:{runtime}/pulse/native")
+    return env
+
+
+def run(cmd):
     try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL, env=env)
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL, env=pulse_env())
     except Exception:
         return ""
 
 
-def parse_percent(block, field):
-    match = re.search(rf"{field}:.*?(\d+)%", block)
-    return int(match.group(1)) if match else 0
+def cache_path():
+    return os.path.join(runtime_dir(), "wyse-vban-pulse-cache.json")
 
 
-def parse_peak(block):
-    values = []
-    for match in re.finditer(r"Peak:\s*(?:front-left:\s*)?([0-9.]+)", block):
-        values.append(float(match.group(1)))
-    for match in re.finditer(r"front-right:\s*([0-9.]+)", block):
-        values.append(float(match.group(1)))
-    if values:
-        return max(values)
-    return None
+def load_cache(label_hint):
+    path = cache_path()
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("label", "").lower() != (label_hint or "").lower():
+        return None
+    if time.time() - float(data.get("time", 0)) > CACHE_TTL:
+        return None
+    return data
 
 
-def parse_peaks_stereo(block):
-    left = None
-    right = None
-    stereo = re.search(
-        r"Peak:\s*front-left:\s*([0-9.]+),\s*front-right:\s*([0-9.]+)",
-        block,
-    )
-    if stereo:
-        return float(stereo.group(1)), float(stereo.group(2))
-    simple = re.search(r"Peak:\s*([0-9.]+)", block)
-    if simple:
-        value = float(simple.group(1))
-        return value, value
-    return left, right
+def save_cache(label_hint, stream_index, media_name, app_name):
+    payload = {
+        "time": time.time(),
+        "label": label_hint,
+        "stream_index": stream_index,
+        "media_name": media_name,
+        "application_name": app_name,
+    }
+    with open(cache_path(), "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
 
 
-def parse_mute(block, field="Mute"):
-    match = re.search(rf"{field}:\s*(yes|no)", block)
-    return match.group(1) == "yes" if match else False
+def parse_volume_percent(text):
+    match = re.search(r"(\d+)%", text or "")
+    return int(match.group(1)) if match else 100
 
 
 def split_blocks(text, header):
@@ -71,108 +85,155 @@ def split_blocks(text, header):
     return blocks
 
 
-def find_stream_input(label_hint):
+def score_stream_block(block, label_hint):
+    media_match = re.search(r'media\.name = "([^"]*)"', block)
+    app_match = re.search(r'application\.name = "([^"]*)"', block)
+    media_name = media_match.group(1) if media_match else ""
+    app_name = app_match.group(1) if app_match else ""
+    score = 0
+    hint = (label_hint or "").lower()
+    if hint and hint in media_name.lower():
+        score += 3
+    if hint and hint in app_name.lower():
+        score += 2
+    if "vban" in app_name.lower() or "vban" in media_name.lower():
+        score += 2
+    return score, media_name, app_name
+
+
+def refresh_cache(label_hint):
     detail = run(["pactl", "list", "sink-inputs"])
     if not detail:
         return None
 
-    label_hint = (label_hint or "").strip().lower()
-    candidates = []
-
+    best = None
     for index, block in split_blocks(detail, "Sink Input #"):
-        media_match = re.search(r'media\.name = "([^"]*)"', block)
-        app_match = re.search(r'application\.name = "([^"]*)"', block)
-        media_name = media_match.group(1) if media_match else ""
-        app_name = app_match.group(1) if app_match else ""
-        peak_left, peak_right = parse_peaks_stereo(block)
+        score, media_name, app_name = score_stream_block(block, label_hint)
         item = {
-            "index": index,
+            "stream_index": index,
             "media_name": media_name,
             "application_name": app_name,
-            "volume_percent": parse_percent(block, "Volume"),
-            "muted": parse_mute(block),
-            "peak_left": peak_left,
-            "peak_right": peak_right,
+            "score": score,
         }
-        candidates.append(item)
+        if best is None or item["score"] > best["score"]:
+            best = item
 
-        score = 0
-        if label_hint and label_hint in media_name.lower():
-            score += 3
-        if label_hint and label_hint in app_name.lower():
-            score += 2
-        if "vban" in app_name.lower() or "vban" in media_name.lower():
-            score += 2
-        item["_score"] = score
-
-    if not candidates:
+    if best is None or best["score"] == 0:
         return None
 
-    candidates.sort(key=lambda item: item.get("_score", 0), reverse=True)
-    best = candidates[0]
-    if best.get("_score", 0) == 0 and label_hint:
-        return None
-    best.pop("_score", None)
+    save_cache(label_hint, best["stream_index"], best["media_name"], best["application_name"])
     return best
 
 
-def find_default_sink():
-    detail = run(["pactl", "list", "sinks"])
-    default_name = run(["pactl", "get-default-sink"]).strip()
-    if not detail or not default_name:
+def stream_index_alive(stream_index):
+    if not stream_index:
+        return False
+    short = run(["pactl", "list", "sink-inputs", "short"])
+    prefix = f"{stream_index}\t"
+    return any(line.startswith(prefix) for line in short.splitlines())
+
+
+def default_sink_volume():
+    return parse_volume_percent(run(["pactl", "get-sink-volume", "@DEFAULT_SINK@"]))
+
+
+def default_sink_name():
+    return run(["pactl", "get-default-sink"]).strip()
+
+
+def stream_input_volume(stream_index):
+    if not stream_index:
         return None
+    return parse_volume_percent(run(["pactl", "get-sink-input-volume", str(stream_index)]))
 
-    for index, block in split_blocks(detail, "Sink #"):
-        name_match = re.search(r"Name:\s*(.+)", block)
-        desc_match = re.search(r"Description:\s*(.+)", block)
-        name = name_match.group(1).strip() if name_match else ""
-        if name != default_name:
+
+def sample_vban_packets(port, seconds=0.18):
+    """Best-effort packet rate when the port is not already bound by vban_receptor."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("0.0.0.0", int(port)))
+    except OSError:
+        return {"available": False, "packets_per_second": 0.0}
+
+    sock.settimeout(0.05)
+    count = 0
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            data, _addr = sock.recvfrom(4096)
+        except socket.timeout:
             continue
-        peak_left, peak_right = parse_peaks_stereo(block)
-        return {
-            "index": index,
-            "name": name,
-            "description": desc_match.group(1).strip() if desc_match else name,
-            "default": True,
-            "volume_percent": parse_percent(block, "Volume"),
-            "muted": parse_mute(block),
-            "peak_left": peak_left,
-            "peak_right": peak_right,
-        }
+        except OSError:
+            break
+        if len(data) >= 4 and data[0:4] == b"VBAN":
+            count += 1
+    sock.close()
+    rate = count / seconds if seconds > 0 else 0.0
+    return {"available": True, "packets_per_second": round(rate, 1)}
 
-    return None
+
+def build_status(label_hint, refresh=False, port=6980):
+    if refresh:
+        refresh_cache(label_hint)
+
+    cache = load_cache(label_hint)
+    if cache is None:
+        refresh_cache(label_hint)
+        cache = load_cache(label_hint)
+
+    stream_index = cache.get("stream_index") if cache else None
+    stream_alive = stream_index_alive(stream_index)
+    stream_volume = stream_input_volume(stream_index) if stream_alive else None
+    sink_volume = default_sink_volume()
+    packet_sample = sample_vban_packets(port)
+
+    signal = {
+        "mode": "presence",
+        "peaks_available": False,
+        "stream_playing": stream_alive,
+        "packet_probe_available": packet_sample["available"],
+        "packets_per_second": packet_sample["packets_per_second"],
+    }
+
+    if packet_sample["available"] and packet_sample["packets_per_second"] > 0:
+        signal["mode"] = "packets"
+        signal["activity"] = min(1.0, packet_sample["packets_per_second"] / 120.0)
+    elif stream_alive:
+        signal["mode"] = "presence"
+        signal["activity"] = 1.0
+    else:
+        signal["activity"] = 0.0
+
+    return {
+        "ok": True,
+        "connected": bool(stream_alive),
+        "stream": {
+            "index": stream_index,
+            "media_name": cache.get("media_name") if cache else "",
+            "application_name": cache.get("application_name") if cache else "",
+            "volume_percent": stream_volume,
+            "playing": stream_alive,
+        }
+        if stream_index
+        else None,
+        "sink": {
+            "name": default_sink_name(),
+            "volume_percent": sink_volume,
+        },
+        "signal": signal,
+    }
 
 
 def main():
-    label_hint = sys.argv[1] if len(sys.argv) > 1 else "VBAN AudioBox"
-    stream = find_stream_input(label_hint)
-    sink = find_default_sink()
+    args = [arg for arg in sys.argv[1:] if arg]
+    refresh = "--refresh-cache" in args
+    args = [arg for arg in args if arg != "--refresh-cache"]
 
-    connected = stream is not None
-    stream_peak = 0.0
-    if stream:
-        peaks = [p for p in (stream.get("peak_left"), stream.get("peak_right")) if p is not None]
-        stream_peak = max(peaks) if peaks else stream.get("volume_percent", 0) / 100.0
+    label_hint = args[0] if args else "VBAN AudioBox"
+    port = int(args[1]) if len(args) > 1 else 6980
 
-    sink_peak = 0.0
-    if sink:
-        peaks = [p for p in (sink.get("peak_left"), sink.get("peak_right")) if p is not None]
-        sink_peak = max(peaks) if peaks else sink.get("volume_percent", 0) / 100.0
-
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "connected": connected,
-                "stream": stream,
-                "sink": sink,
-                "levels": {
-                    "stream_peak": round(stream_peak, 4),
-                    "sink_peak": round(sink_peak, 4),
-                },
-            }
-        )
-    )
+    print(json.dumps(build_status(label_hint, refresh=refresh, port=port)))
     return 0
 
 

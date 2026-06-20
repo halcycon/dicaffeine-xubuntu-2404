@@ -57,23 +57,16 @@ include 'top.php';
   </div>
 
   <div class="wyse-card" id="audio-panel" style="<?php echo $status === 'active' ? '' : 'display:none;'; ?>">
-    <h5>Audio levels &amp; volume</h5>
-    <div class="wyse-meter-grid">
-      <div class="wyse-meter-block">
-        <label>VBAN stream</label>
-        <div class="wyse-meter">
-          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="stream-meter-l"></div></div>
-          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="stream-meter-r"></div></div>
-        </div>
-      </div>
-      <div class="wyse-meter-block">
-        <label>System output</label>
-        <div class="wyse-meter">
-          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="sink-meter-l"></div></div>
-          <div class="wyse-meter-bar"><div class="wyse-meter-fill" id="sink-meter-r"></div></div>
-        </div>
+    <h5>Volume</h5>
+    <div class="wyse-signal-row">
+      <span class="wyse-signal-badge" id="signal-badge">Checking audio path&hellip;</span>
+      <div class="wyse-signal-track" aria-hidden="true">
+        <div class="wyse-signal-fill" id="signal-fill"></div>
       </div>
     </div>
+    <p class="wyse-muted wyse-signal-help" id="audio-panel-note">
+      PipeWire on this device does not expose audio peak meters. The bar shows VBAN/Pulse activity, not loudness.
+    </p>
     <div class="wyse-volume-controls">
       <div class="wyse-volume-row">
         <label for="stream-volume"><span>Stream volume</span><span id="stream-vol-label">100%</span></label>
@@ -84,7 +77,6 @@ include 'top.php';
         <input type="range" id="sink-volume" min="0" max="150" step="1" value="100">
       </div>
     </div>
-    <p class="wyse-muted mb-0 mt-3" id="audio-panel-note">Peaks come from PipeWire when available; sliders adjust PulseAudio volume.</p>
   </div>
 
   <div class="wyse-card">
@@ -136,8 +128,13 @@ include 'top.php';
   var sinkVolume = document.getElementById('sink-volume');
   var streamVolLabel = document.getElementById('stream-vol-label');
   var sinkVolLabel = document.getElementById('sink-vol-label');
+  var signalBadge = document.getElementById('signal-badge');
+  var signalFill = document.getElementById('signal-fill');
+  var signalHelp = document.getElementById('audio-panel-note');
   var isActive = <?php echo json_encode($status === 'active'); ?>;
   var volumeTimers = { stream: null, sink: null };
+  var displayedActivity = 0;
+  var audioPollMs = 3000;
 
   function escapeHtml(value) {
     return String(value)
@@ -147,11 +144,31 @@ include 'top.php';
       .replace(/"/g, '&quot;');
   }
 
-  function setMeter(id, value) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    var pct = Math.max(0, Math.min(100, Math.round(value * 100)));
-    el.style.height = pct + '%';
+  function updateSignal(data) {
+    if (!signalBadge || !signalFill) return;
+
+    var signal = data.signal || {};
+    var target = typeof signal.activity === 'number' ? signal.activity : 0;
+    displayedActivity = (displayedActivity * 0.65) + (target * 0.35);
+    signalFill.style.width = Math.max(4, Math.round(displayedActivity * 100)) + '%';
+
+    if (signal.stream_playing) {
+      signalBadge.textContent = 'Playing in PulseAudio';
+      signalBadge.className = 'wyse-signal-badge active';
+    } else {
+      signalBadge.textContent = 'Waiting for PulseAudio stream';
+      signalBadge.className = 'wyse-signal-badge idle';
+    }
+
+    if (signalHelp) {
+      if (signal.mode === 'packets') {
+        signalHelp.textContent = 'VBAN packets detected on the network (' + signal.packets_per_second + '/s). Sliders change Pulse volume only.';
+      } else if (signal.peaks_available) {
+        signalHelp.textContent = 'Live audio levels from PipeWire.';
+      } else {
+        signalHelp.textContent = 'PipeWire does not expose peak meters here. The bar shows stream presence, not loudness. Sliders change Pulse volume.';
+      }
+    }
   }
 
   function updateVolumeLabels() {
@@ -181,27 +198,18 @@ include 'top.php';
     }, 120);
   }
 
-  function pollLevels() {
+  function pollAudioStatus() {
     if (!isActive) return;
     fetch('audio-levels-api.php?id=' + encodeURIComponent(slot))
       .then(function (response) { return response.json(); })
       .then(function (data) {
         if (!data.ok) return;
-        var streamPeak = data.levels ? data.levels.stream_peak : 0;
-        var sinkPeak = data.levels ? data.levels.sink_peak : 0;
-        var streamPeakL = data.stream && data.stream.peak_left != null ? data.stream.peak_left : streamPeak;
-        var streamPeakR = data.stream && data.stream.peak_right != null ? data.stream.peak_right : streamPeak;
-        var sinkPeakL = data.sink && data.sink.peak_left != null ? data.sink.peak_left : sinkPeak;
-        var sinkPeakR = data.sink && data.sink.peak_right != null ? data.sink.peak_right : sinkPeak;
-        setMeter('stream-meter-l', streamPeakL);
-        setMeter('stream-meter-r', streamPeakR);
-        setMeter('sink-meter-l', sinkPeakL);
-        setMeter('sink-meter-r', sinkPeakR);
-        if (data.stream && streamVolume && document.activeElement !== streamVolume) {
-          streamVolume.value = String(data.stream.volume_percent || 100);
+        updateSignal(data);
+        if (data.stream && streamVolume && document.activeElement !== streamVolume && data.stream.volume_percent != null) {
+          streamVolume.value = String(data.stream.volume_percent);
         }
-        if (data.sink && sinkVolume && document.activeElement !== sinkVolume) {
-          sinkVolume.value = String(data.sink.volume_percent || 100);
+        if (data.sink && sinkVolume && document.activeElement !== sinkVolume && data.sink.volume_percent != null) {
+          sinkVolume.value = String(data.sink.volume_percent);
         }
         updateVolumeLabels();
       })
@@ -219,7 +227,7 @@ include 'top.php';
         '<p class="wyse-status-active mb-1">Playing <strong>' + escapeHtml(data.stream) + '</strong> from ' +
         escapeHtml(data.sender) + ':' + escapeHtml(String(data.port || defaultPort)) + '</p>' +
         '<a class="btn btn-danger btn-sm" href="disconnect.php?id=' + encodeURIComponent(slot) + '">Stop</a>';
-      pollLevels();
+      pollAudioStatus();
       return;
     }
     if (data.state === 'activating') {
@@ -327,11 +335,11 @@ include 'top.php';
   });
 
   setInterval(pollStatus, 2500);
-  setInterval(pollLevels, 180);
+  setInterval(pollAudioStatus, audioPollMs);
   pollStatus();
   updateVolumeLabels();
   if (isActive) {
-    pollLevels();
+    pollAudioStatus();
   }
 })();
 </script>

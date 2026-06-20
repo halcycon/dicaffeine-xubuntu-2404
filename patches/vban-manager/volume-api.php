@@ -16,7 +16,8 @@ if ($percent < 0 || $percent > 150) {
 
 $current = wyse_read_server_args($slot);
 $label = wyse_pulse_label($defaults, $current);
-$levels = wyse_audio_levels($label);
+$port = isset($current['p']) && $current['p'] !== '' ? $current['p'] : $defaults['VBAN_UDP_PORT'];
+$levels = wyse_audio_levels($label, $port);
 
 if ($action === 'set_sink') {
     wyse_set_sink_volume($percent);

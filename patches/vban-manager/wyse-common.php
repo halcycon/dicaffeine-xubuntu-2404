@@ -576,6 +576,8 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
         return array('error' => 'VBAN receptor did not stay running (' . $final . '). ' . $hint, 'notice' => null);
     }
 
+    wyse_refresh_audio_cache(wyse_pulse_label($defaults, wyse_read_server_args($id)), $port);
+
     return array('error' => null, 'notice' => $notice);
 }
 
@@ -634,13 +636,28 @@ function wyse_server_nav_label($id)
     return $prefix . 'Server #' . $id;
 }
 
-function wyse_audio_levels($pulseLabel = '')
+function wyse_refresh_audio_cache($pulseLabel, $port = '6980')
 {
-    $cmd = '/usr/local/bin/wyse-vban-audio-levels ' . escapeshellarg($pulseLabel !== '' ? $pulseLabel : 'VBAN AudioBox');
+    shell_exec(
+        wyse_user_env_prefix()
+        . ' /usr/local/bin/wyse-vban-audio-levels --refresh-cache '
+        . escapeshellarg($pulseLabel !== '' ? $pulseLabel : 'VBAN AudioBox')
+        . ' '
+        . escapeshellarg((string)$port)
+        . ' 2>/dev/null'
+    );
+}
+
+function wyse_audio_levels($pulseLabel = '', $port = '6980')
+{
+    $cmd = '/usr/local/bin/wyse-vban-audio-levels '
+        . escapeshellarg($pulseLabel !== '' ? $pulseLabel : 'VBAN AudioBox')
+        . ' '
+        . escapeshellarg((string)$port);
     $json = trim(shell_exec(wyse_user_env_prefix() . ' ' . $cmd . ' 2>&1') ?? '');
     $data = json_decode($json, true);
     if (!is_array($data)) {
-        return array('ok' => false, 'error' => 'Could not read audio levels.');
+        return array('ok' => false, 'error' => 'Could not read audio status.');
     }
     return $data;
 }
