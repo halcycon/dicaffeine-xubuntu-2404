@@ -129,6 +129,39 @@ function wyse_primary_ip()
     return $ip;
 }
 
+function wyse_manager_dir()
+{
+    static $dir = null;
+    if ($dir !== null) {
+        return $dir;
+    }
+
+    $dir = '/opt/vban-manager';
+    $defaults = wyse_load_defaults();
+    if (!empty($defaults['VBAN_MANAGER_DIR'])) {
+        $dir = rtrim($defaults['VBAN_MANAGER_DIR'], '/');
+    }
+    return $dir;
+}
+
+function wyse_script_dir()
+{
+    return wyse_manager_dir() . '/script';
+}
+
+function wyse_args_path($id)
+{
+    return wyse_script_dir() . '/args-' . $id . '.txt';
+}
+
+function wyse_args_id_from_file($path)
+{
+    if (preg_match('/^args-(.+)\.txt$/', basename($path), $matches)) {
+        return $matches[1];
+    }
+    return basename($path, '.txt');
+}
+
 function wyse_user_env_prefix()
 {
     $uid = function_exists('posix_getuid') ? posix_getuid() : 0;
@@ -143,16 +176,13 @@ function wyse_user_env_prefix()
 
 function wyse_vban_sh($command)
 {
-    global $script;
-    chdir($script);
-    return shell_exec(wyse_user_env_prefix() . ' ./vban.sh ' . $command . ' 2>&1');
+    $vbanSh = wyse_script_dir() . '/vban.sh';
+    return shell_exec(wyse_user_env_prefix() . ' ' . escapeshellarg($vbanSh) . ' ' . $command . ' 2>&1');
 }
 
 function wyse_server_status($id)
 {
-    global $script;
-    chdir($script);
-    $status = trim(shell_exec(wyse_user_env_prefix() . ' ./vban.sh is-active ' . escapeshellarg($id) . ' 2>&1') ?? '');
+    $status = trim(shell_exec(wyse_user_env_prefix() . ' ' . escapeshellarg(wyse_script_dir() . '/vban.sh') . ' is-active ' . escapeshellarg($id) . ' 2>&1') ?? '');
 
     if ($status === 'active') {
         return 'active';
@@ -161,6 +191,7 @@ function wyse_server_status($id)
         $journal = wyse_service_journal($id, 8);
         if (stripos($journal, 'Could not find vban_') !== false ||
             stripos($journal, 'not found in PATH') !== false ||
+            stripos($journal, 'Missing args-') !== false ||
             stripos($journal, 'Connection refused') !== false ||
             stripos($journal, 'Failed to connect') !== false ||
             stripos($journal, 'code=exited') !== false ||
@@ -199,8 +230,7 @@ function wyse_parse_args_line($line)
 
 function wyse_read_server_args($id)
 {
-    global $args;
-    $file = $args . $id . '.txt';
+    $file = wyse_args_path($id);
     if (!is_readable($file)) {
         return array();
     }
@@ -209,10 +239,9 @@ function wyse_read_server_args($id)
 
 function wyse_list_servers()
 {
-    global $script, $args_sub;
     $servers = array();
-    foreach (glob($script . 'args-*.txt') as $file) {
-        $id = substr(basename($file), $args_sub, -4);
+    foreach (glob(wyse_script_dir() . '/args-*.txt') as $file) {
+        $id = wyse_args_id_from_file($file);
         $servers[] = array(
             'id' => $id,
             'status' => wyse_server_status($id),
@@ -323,8 +352,6 @@ function wyse_build_receptor_line($sender, $stream, $port, $defaults)
 
 function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
 {
-    global $args;
-
     $sender = trim($sender);
     $stream = trim($stream);
     $port = trim((string)$port);
@@ -335,6 +362,7 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
 
     wyse_vban_sh('stop ' . escapeshellarg($id));
     usleep(300000);
+    shell_exec(wyse_user_env_prefix() . ' systemctl --user reset-failed ' . escapeshellarg('vban@' . $id . '.service') . ' 2>/dev/null');
 
     if ($stream === '') {
         $seconds = $defaults['VBAN_SCAN_SECONDS'] !== '' ? (float)$defaults['VBAN_SCAN_SECONDS'] : 5.0;
@@ -367,13 +395,23 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
     }
 
     $line = wyse_build_receptor_line($sender, $stream, $port, $defaults);
-    file_put_contents($args . $id . '.txt', $line . "\n");
+    $argsFile = wyse_args_path($id);
+    if (file_put_contents($argsFile, $line . "\n", LOCK_EX) === false) {
+        return 'Could not write stream config to ' . $argsFile . '. Check permissions on /opt/vban-manager/script/.';
+    }
+    if (!is_readable($argsFile)) {
+        return 'Stream config was not saved (' . $argsFile . ' missing after write).';
+    }
+
     wyse_prepare_audio($defaults);
     wyse_vban_sh('start ' . escapeshellarg($id));
 
     $final = wyse_wait_service($id);
     if ($final !== 'active') {
         $log = wyse_service_journal($id, 8);
+        if (stripos($log, 'Missing args-') !== false) {
+            return 'VBAN args file missing at ' . $argsFile . '. Update the kit and try Connect again.';
+        }
         $hint = 'Stream name must match VoiceMeeter exactly (case-sensitive).';
         if ($log !== '') {
             return 'VBAN receptor exited (' . $final . '). ' . $hint . ' Log: ' . preg_replace('/\s+/', ' ', $log);

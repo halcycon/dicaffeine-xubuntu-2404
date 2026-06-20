@@ -125,6 +125,7 @@ install_patch_file() {
 }
 
 for patch_file in \
+  config.php \
   action.php \
   modify_args.php \
   index.php \
@@ -145,6 +146,17 @@ done
 
 install_patch_file "css/wyse-audiobox.css"
 install -o "${APP_USER}" -g "${APP_USER}" -m 0755 "${PATCH_DIR}/vban.sh" "${MANAGER_DIR}/script/vban.sh"
+
+nested_args="${MANAGER_DIR}/script/script"
+if [[ -d "${nested_args}" ]]; then
+  shopt -s nullglob
+  for misplaced in "${nested_args}"/args-*.txt; do
+    log "Moving misplaced $(basename "${misplaced}") into script/"
+    mv -f "${misplaced}" "${MANAGER_DIR}/script/"
+  done
+  shopt -u nullglob
+  rmdir "${nested_args}" 2>/dev/null || true
+fi
 
 log "Installing shared helpers and /etc/default/wyse-vban stub"
 UPDATE_MODE="$UPDATE_MODE" TARGET_USER="$APP_USER" bash "${KIT_ROOT}/scripts/install-common-helpers.sh"

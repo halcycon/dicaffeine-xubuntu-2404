@@ -19,7 +19,7 @@ function before($needle, $haystack)
 }
 
 $id = $_GET['id'];
-$argsfile = $args . $id . '.txt';
+$argsfile = wyse_args_path($id);
 
 if (!isset($_GET['new'])) {
     $argscontent = file_get_contents($argsfile);
