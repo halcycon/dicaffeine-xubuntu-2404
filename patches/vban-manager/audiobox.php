@@ -81,8 +81,9 @@ include 'top.php';
   </div>
 
   <p class="wyse-muted">
-    <a href="server.php?id=<?php echo wyse_h($slot); ?>">Advanced settings</a>
-    for backend, port, ALSA device, and extra server slots.
+    <a href="settings.php">Settings</a>
+    &middot;
+    <a href="server.php?id=<?php echo wyse_h($slot); ?>">Advanced server</a>
   </p>
 </div>
 

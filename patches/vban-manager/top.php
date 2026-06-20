@@ -39,6 +39,9 @@ include 'config.php';
 					<a class="nav-link" id="page-audiobox" href="audiobox.php">AudioBox</a>
 				</li>
 				<li class="nav-item">
+					<a class="nav-link" id="page-settings" href="settings.php">Settings</a>
+				</li>
+				<li class="nav-item">
 					<a class="nav-link" id="page-welcome" href="index.php">Welcome</a>
 				</li>
                 <li class="nav-item dropdown">

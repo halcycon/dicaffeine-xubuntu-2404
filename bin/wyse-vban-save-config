@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Write validated Wyse VBAN settings to /etc/default/wyse-vban.
+# Intended to be called from the AudioBox settings UI as user ndi.
+
+CONFIG_FILE="${WYSE_VBAN_CONFIG:-/etc/default/wyse-vban}"
+INPUT="${1:-}"
+
+if [[ ! -w "${CONFIG_FILE}" ]]; then
+  echo "Config file is not writable: ${CONFIG_FILE}" >&2
+  exit 1
+fi
+
+if [[ -z "${INPUT}" ]]; then
+  INPUT="$(cat)"
+fi
+
+if [[ -z "${INPUT}" ]]; then
+  echo "No settings payload received." >&2
+  exit 1
+fi
+
+tmp="$(mktemp)"
+cleanup() { rm -f "${tmp}"; }
+trap cleanup EXIT
+
+printf '%s' "${INPUT}" > "${tmp}"
+
+python3 - "${CONFIG_FILE}" "${tmp}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+dest = Path(sys.argv[1])
+payload = Path(sys.argv[2]).read_text(encoding="utf-8")
+
+allowed = {
+    "VBAN_SENDER_IP": r"^$|^[0-9.]+$",
+    "VBAN_UDP_PORT": r"^[0-9]{1,5}$",
+    "VBAN_STREAM_NAME": r"^[^\s#\"']*$",
+    "VBAN_SCAN_SECONDS": r"^[0-9]+(\.[0-9]+)?$",
+    "VBAN_NETWORK_QUALITY": r"^[0-4]$",
+    "VBAN_BACKEND": r"^(pulseaudio|alsa)$",
+    "VBAN_PULSE_LABEL": r"^.*$",
+    "VBAN_PULSE_SINK": r"^.*$",
+    "VBAN_ALSA_DEVICE": r"^.*$",
+    "VBAN_STOP_PIPEWIRE_FOR_ALSA": r"^(0|1)$",
+    "AUDIOBOX_SLOT": r"^[0-9]+$",
+    "VBAN_MANAGER_DIR": r"^/.+$",
+    "VBAN_MANAGER_PORT": r"^[0-9]{1,5}$",
+    "VBAN_MANAGER_BIND": r"^([0-9]{1,3}\.){3}[0-9]{1,3}$|^0\.0\.0\.0$",
+}
+
+values = {}
+for raw_line in payload.splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if key not in allowed:
+        continue
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1]
+    if not re.match(allowed[key], value):
+        raise SystemExit(f"Invalid value for {key}: {value!r}")
+    values[key] = value
+
+if not values:
+    raise SystemExit("No valid settings keys found in payload.")
+
+header = """# Wyse VBAN AudioBox settings
+# Editable via the AudioBox web UI (settings.php) or manually on the box.
+# Re-running the kit update will not overwrite this file.
+
+"""
+
+sections = [
+    ("--- Network / VBAN ---", [
+        "VBAN_SENDER_IP",
+        "VBAN_UDP_PORT",
+        "VBAN_STREAM_NAME",
+        "VBAN_SCAN_SECONDS",
+        "VBAN_NETWORK_QUALITY",
+    ]),
+    ("--- Audio backend ---", [
+        "VBAN_BACKEND",
+    ]),
+    ("--- PipeWire / PulseAudio ---", [
+        "VBAN_PULSE_LABEL",
+        "VBAN_PULSE_SINK",
+    ]),
+    ("--- ALSA ---", [
+        "VBAN_ALSA_DEVICE",
+        "VBAN_STOP_PIPEWIRE_FOR_ALSA",
+    ]),
+    ("--- AudioBox UI ---", [
+        "AUDIOBOX_SLOT",
+    ]),
+    ("--- VBAN-manager web service ---", [
+        "VBAN_MANAGER_DIR",
+        "VBAN_MANAGER_PORT",
+        "VBAN_MANAGER_BIND",
+    ]),
+]
+
+defaults = {
+    "VBAN_SENDER_IP": "",
+    "VBAN_UDP_PORT": "6980",
+    "VBAN_STREAM_NAME": "Stream1",
+    "VBAN_SCAN_SECONDS": "5",
+    "VBAN_NETWORK_QUALITY": "1",
+    "VBAN_BACKEND": "pulseaudio",
+    "VBAN_PULSE_LABEL": "VBAN AudioBox",
+    "VBAN_PULSE_SINK": "",
+    "VBAN_ALSA_DEVICE": "",
+    "VBAN_STOP_PIPEWIRE_FOR_ALSA": "1",
+    "AUDIOBOX_SLOT": "1",
+    "VBAN_MANAGER_DIR": "/opt/vban-manager",
+    "VBAN_MANAGER_PORT": "8088",
+    "VBAN_MANAGER_BIND": "0.0.0.0",
+}
+
+merged = defaults.copy()
+merged.update(values)
+
+def fmt(key, value):
+    if re.search(r"[\s\"#]", value):
+        return f'{key}="{value.replace(chr(34), "")}"'
+    return f"{key}={value}"
+
+lines = [header.rstrip(), ""]
+for title, keys in sections:
+    lines.append(f"# {title}")
+    for key in keys:
+        lines.append(fmt(key, merged.get(key, defaults.get(key, ""))))
+    lines.append("")
+
+dest.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+print(f"Saved {dest}")
+PY

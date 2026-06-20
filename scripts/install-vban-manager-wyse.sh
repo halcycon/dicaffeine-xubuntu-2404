@@ -135,6 +135,9 @@ for patch_file in \
   connect.php \
   disconnect.php \
   status-api.php \
+  settings.php \
+  save-settings.php \
+  audio-devices.php \
   wyse-common.php
 do
   install_patch_file "${patch_file}"

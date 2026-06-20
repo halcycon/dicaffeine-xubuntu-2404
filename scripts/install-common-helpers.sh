@@ -35,6 +35,10 @@ install_config_if_missing() {
 
   if [ -f "$dest" ]; then
     echo "Keeping existing ${dest}"
+    if [ "$name" = "wyse-vban.default" ]; then
+      sudo chown root:"$TARGET_USER" "$dest" 2>/dev/null || true
+      sudo chmod 664 "$dest" 2>/dev/null || true
+    fi
   else
     echo "Installing ${dest}"
     sudo install -m 0644 "$src" "$dest"
@@ -42,11 +46,16 @@ install_config_if_missing() {
       sudo chown root:"$TARGET_USER" "$dest" 2>/dev/null || true
       sudo chmod 640 "$dest" 2>/dev/null || true
     fi
+    if [ "$name" = "wyse-vban.default" ]; then
+      sudo chown root:"$TARGET_USER" "$dest" 2>/dev/null || true
+      sudo chmod 664 "$dest" 2>/dev/null || true
+    fi
   fi
 }
 
 migrate_wyse_vban_config() {
   local dest="/etc/default/wyse-vban"
+  local target_user="${TARGET_USER:-ndi}"
   if [ ! -f "$dest" ]; then
     return 0
   fi
@@ -60,6 +69,8 @@ migrate_wyse_vban_config() {
     echo "Fixing unquoted VBAN_PULSE_LABEL in ${dest}"
     sudo sed -i 's/^VBAN_PULSE_LABEL=VBAN AudioBox$/VBAN_PULSE_LABEL="VBAN AudioBox"/' "$dest"
   fi
+  sudo chown root:"$target_user" "$dest" 2>/dev/null || true
+  sudo chmod 664 "$dest" 2>/dev/null || true
 }
 
 echo "== Installing shared helpers =="
@@ -70,6 +81,8 @@ for helper in \
   wyse-vban-status \
   wyse-vban-scan \
   wyse-vban-parse-args \
+  wyse-vban-audio-devices \
+  wyse-vban-save-config \
   vban-box-audio-info \
   vban-box-stop-pipewire \
   vban-box-start-pipewire

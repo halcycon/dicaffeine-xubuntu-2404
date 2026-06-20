@@ -75,7 +75,7 @@ Existing `/etc/default/wyse-vban` and `/etc/default/wyse-wifi-setup` are **never
 
 | File | Purpose |
 |------|---------|
-| `/etc/default/wyse-vban` | VBAN sender IP, stream name, UDP port, manager bind/port |
+| `/etc/default/wyse-vban` | Persistent AudioBox settings (network, backend, devices); editable via **Settings** in the web UI |
 | `/etc/default/wyse-wifi-setup` | Hotspot SSID, gateway `192.168.44.1`, QR directory |
 
 ---

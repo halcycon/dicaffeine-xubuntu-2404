@@ -1,25 +1,36 @@
-# Wyse VBAN appliance defaults.
-# Edit on the box; re-running the kit update will not overwrite this file.
+# Wyse VBAN AudioBox settings
+# Editable via the AudioBox web UI (settings.php) or manually on the box.
+# Re-running the kit update will not overwrite this file.
 
-# VBAN-manager web UI (user systemd: vban-manager-web.service)
-VBAN_MANAGER_DIR=/opt/vban-manager
-VBAN_MANAGER_PORT=8088
-# Bind address: 0.0.0.0 listens on all interfaces (LAN only in production).
-# Set to the Wyse LAN IP to limit exposure, e.g. 192.168.1.50
-VBAN_MANAGER_BIND=0.0.0.0
-
-# VoiceMeeter / VBAN receptor defaults (reference for operators and overlays)
-# vban_receptor -i uses the SENDER laptop IP, not 0.0.0.0
+# --- Network / VBAN ---
+# Sender PC IP (VoiceMeeter). Used as manual-connect default, not 0.0.0.0.
 VBAN_SENDER_IP=
 VBAN_UDP_PORT=6980
 VBAN_STREAM_NAME=Stream1
-VBAN_BACKEND=pulseaudio
-VBAN_PULSE_LABEL="VBAN AudioBox"
-# For direct ALSA (stop PipeWire first): plughw:CARD=USB,DEV=0
-VBAN_ALSA_DEVICE=
+VBAN_SCAN_SECONDS=5
+VBAN_NETWORK_QUALITY=1
 
-# Primary AudioBox server slot used by the simple UI
+# --- Audio backend: pulseaudio or alsa ---
+# pulseaudio works with PipeWire and allows NDI + VBAN together.
+# alsa talks directly to hardware; stop PipeWire first (see below).
+VBAN_BACKEND=pulseaudio
+
+# PipeWire / PulseAudio (when VBAN_BACKEND=pulseaudio)
+# -d for vban_receptor: Pulse stream label (shown in pavucontrol), not hardware device
+VBAN_PULSE_LABEL="VBAN AudioBox"
+# Optional: force playback to this sink (pactl sink name). Leave empty for system default.
+VBAN_PULSE_SINK=
+
+# ALSA (when VBAN_BACKEND=alsa)
+# Device string for vban_receptor -d, e.g. plughw:CARD=USB,DEV=0
+VBAN_ALSA_DEVICE=
+# Stop PipeWire before starting VBAN when using direct ALSA (recommended)
+VBAN_STOP_PIPEWIRE_FOR_ALSA=1
+
+# --- AudioBox UI ---
 AUDIOBOX_SLOT=1
 
-# How long scan.php listens for VBAN packets
-VBAN_SCAN_SECONDS=5
+# --- VBAN-manager web service (restart required after changing port/bind) ---
+VBAN_MANAGER_DIR=/opt/vban-manager
+VBAN_MANAGER_PORT=8088
+VBAN_MANAGER_BIND=0.0.0.0

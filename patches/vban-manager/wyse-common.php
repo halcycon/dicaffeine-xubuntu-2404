@@ -1,21 +1,36 @@
 <?php
 
-function wyse_load_defaults()
+function wyse_config_path()
 {
-    $defaults = array(
+    return '/etc/default/wyse-vban';
+}
+
+function wyse_config_schema()
+{
+    return array(
+        'VBAN_SENDER_IP' => '',
         'VBAN_UDP_PORT' => '6980',
+        'VBAN_STREAM_NAME' => 'Stream1',
+        'VBAN_SCAN_SECONDS' => '5',
+        'VBAN_NETWORK_QUALITY' => '1',
         'VBAN_BACKEND' => 'pulseaudio',
         'VBAN_PULSE_LABEL' => 'VBAN AudioBox',
-        'VBAN_STREAM_NAME' => 'Stream1',
-        'VBAN_SENDER_IP' => '',
+        'VBAN_PULSE_SINK' => '',
         'VBAN_ALSA_DEVICE' => '',
-        'VBAN_SCAN_SECONDS' => '5',
+        'VBAN_STOP_PIPEWIRE_FOR_ALSA' => '1',
         'AUDIOBOX_SLOT' => '1',
+        'VBAN_MANAGER_DIR' => '/opt/vban-manager',
+        'VBAN_MANAGER_PORT' => '8088',
+        'VBAN_MANAGER_BIND' => '0.0.0.0',
     );
+}
 
-    $file = '/etc/default/wyse-vban';
+function wyse_load_defaults()
+{
+    $config = wyse_config_schema();
+    $file = wyse_config_path();
     if (!is_readable($file)) {
-        return $defaults;
+        return $config;
     }
 
     foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
@@ -24,16 +39,84 @@ function wyse_load_defaults()
             continue;
         }
         if (preg_match('/^([A-Z0-9_]+)=(.*)$/', $line, $matches)) {
+            if (!array_key_exists($matches[1], $config)) {
+                continue;
+            }
             $value = trim($matches[2]);
             if ((substr($value, 0, 1) === '"' && substr($value, -1) === '"') ||
                 (substr($value, 0, 1) === "'" && substr($value, -1) === "'")) {
                 $value = substr($value, 1, -1);
             }
-            $defaults[$matches[1]] = $value;
+            $config[$matches[1]] = $value;
         }
     }
 
-    return $defaults;
+    return $config;
+}
+
+function wyse_config_writable()
+{
+    $file = wyse_config_path();
+    return is_writable($file) || (!file_exists($file) && is_writable(dirname($file)));
+}
+
+function wyse_save_defaults($values)
+{
+    $lines = array();
+    foreach (wyse_config_schema() as $key => $default) {
+        $value = isset($values[$key]) ? trim((string)$values[$key]) : $default;
+        if (preg_match('/[\s"#]/', $value)) {
+            $value = str_replace('"', '', $value);
+            $lines[] = $key . '="' . $value . '"';
+        } else {
+            $lines[] = $key . '=' . $value;
+        }
+    }
+
+    $payload = implode("\n", $lines) . "\n";
+    $cmd = 'printf %s ' . escapeshellarg($payload) . ' | /usr/local/bin/wyse-vban-save-config 2>&1';
+    $output = trim(shell_exec($cmd) ?? '');
+    if ($output === '' || stripos($output, 'Saved ') !== 0) {
+        return $output !== '' ? $output : 'Could not save settings.';
+    }
+    return null;
+}
+
+function wyse_list_audio_devices()
+{
+    $json = trim(shell_exec('/usr/local/bin/wyse-vban-audio-devices 2>&1') ?? '');
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return array(
+            'ok' => false,
+            'error' => 'Could not list audio devices.',
+            'pipewire_running' => false,
+            'pulse_sinks' => array(),
+            'alsa_cards' => array(),
+        );
+    }
+    return $data;
+}
+
+function wyse_prepare_audio($defaults)
+{
+    $backend = isset($defaults['VBAN_BACKEND']) ? $defaults['VBAN_BACKEND'] : 'pulseaudio';
+
+    if ($backend === 'alsa') {
+        if (($defaults['VBAN_STOP_PIPEWIRE_FOR_ALSA'] ?? '1') === '1') {
+            shell_exec('/usr/local/bin/vban-box-stop-pipewire 2>/dev/null');
+            usleep(500000);
+        }
+        return;
+    }
+
+    shell_exec('/usr/local/bin/vban-box-start-pipewire 2>/dev/null');
+    usleep(300000);
+
+    $sink = trim($defaults['VBAN_PULSE_SINK'] ?? '');
+    if ($sink !== '') {
+        shell_exec('pactl set-default-sink ' . escapeshellarg($sink) . ' 2>/dev/null');
+    }
 }
 
 function wyse_primary_ip()
@@ -194,7 +277,9 @@ function wyse_build_receptor_line($sender, $stream, $port, $defaults)
     }
 
     $parts[] = '-q';
-    $parts[] = '1';
+    $parts[] = isset($defaults['VBAN_NETWORK_QUALITY']) && $defaults['VBAN_NETWORK_QUALITY'] !== ''
+        ? wyse_quote_arg($defaults['VBAN_NETWORK_QUALITY'])
+        : '1';
     return implode(' ', $parts);
 }
 
@@ -245,6 +330,7 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
 
     $line = wyse_build_receptor_line($sender, $stream, $port, $defaults);
     file_put_contents($args . $id . '.txt', $line . "\n");
+    wyse_prepare_audio($defaults);
     wyse_vban_sh('start ' . escapeshellarg($id));
 
     $final = wyse_wait_service($id);

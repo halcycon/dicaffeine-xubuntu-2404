@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""List ALSA playback devices and PipeWire/Pulse sinks as JSON."""
+
+import json
+import re
+import subprocess
+import sys
+
+
+def run(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+    except Exception:
+        return ""
+
+
+def pipewire_running():
+    for unit in (
+        "pipewire.service",
+        "pipewire-pulse.service",
+        "wireplumber.service",
+    ):
+        state = run(["systemctl", "--user", "is-active", unit]).strip()
+        if state != "active":
+            return False
+    return True
+
+
+def list_pulse_sinks():
+    sinks = []
+    default_sink = ""
+    default_raw = run(["pactl", "get-default-sink"])
+    if default_raw:
+        default_sink = default_raw.strip()
+
+    short = run(["pactl", "list", "short", "sinks"])
+    for line in short.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        name = parts[1]
+        desc = name
+        detail = run(["pactl", "list", "sinks"])
+        block = ""
+        if detail:
+            pattern = re.compile(
+                rf"Sink #{re.escape(parts[0])}\n(.*?)(?:\nSink #|\Z)",
+                re.S,
+            )
+            match = pattern.search(detail + "\n")
+            if match:
+                block = match.group(1)
+                desc_match = re.search(r"Description:\s*(.+)", block)
+                if desc_match:
+                    desc = desc_match.group(1).strip()
+        sinks.append(
+            {
+                "name": name,
+                "description": desc,
+                "default": name == default_sink,
+            }
+        )
+    return sinks, default_sink
+
+
+def list_alsa_cards():
+    cards = []
+    cards_text = run(["cat", "/proc/asound/cards"])
+    if not cards_text:
+        return cards
+
+    for line in cards_text.splitlines():
+        match = re.match(r"\s*(\d+)\s+\[([^\]]+)\]:\s*(.+)", line)
+        if not match:
+            continue
+        index, card_id, title = match.groups()
+        cards.append(
+            {
+                "index": int(index),
+                "id": card_id.strip(),
+                "title": title.strip(),
+                "devices": [],
+            }
+        )
+
+    aplay = run(["aplay", "-l"])
+    for line in aplay.splitlines():
+        match = re.match(
+            r"card (\d+):\s*([^[]+)\[([^\]]+)\],\s*device (\d+):\s*(.+)",
+            line,
+        )
+        if not match:
+            continue
+        card_index, _card_name, card_id, device, desc = match.groups()
+        card_index = int(card_index)
+        device = int(device)
+        plughw = f"plughw:CARD={card_id.strip()},DEV={device}"
+        hw = f"hw:CARD={card_id.strip()},DEV={device}"
+        for card in cards:
+            if card["index"] == card_index:
+                card["devices"].append(
+                    {
+                        "device": device,
+                        "description": desc.strip(),
+                        "plughw": plughw,
+                        "hw": hw,
+                    }
+                )
+                break
+
+    return cards
+
+
+def main():
+    pipewire = pipewire_running()
+    sinks, default_sink = list_pulse_sinks() if pipewire else ([], "")
+    cards = list_alsa_cards()
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "pipewire_running": pipewire,
+                "pulse_default_sink": default_sink,
+                "pulse_sinks": sinks,
+                "alsa_cards": cards,
+            }
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
