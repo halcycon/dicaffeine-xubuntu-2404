@@ -17,3 +17,9 @@ VBAN_BACKEND=pulseaudio
 VBAN_PULSE_LABEL="VBAN AudioBox"
 # For direct ALSA (stop PipeWire first): plughw:CARD=USB,DEV=0
 VBAN_ALSA_DEVICE=
+
+# Primary AudioBox server slot used by the simple UI
+AUDIOBOX_SLOT=1
+
+# How long scan.php listens for VBAN packets
+VBAN_SCAN_SECONDS=5

@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Listen for incoming VBAN UDP packets and report sender IP + stream names."""
+
+import json
+import socket
+import sys
+import time
+
+VBAN_MAGIC = b"VBAN"
+VBAN_HEADER_SIZE = 28
+DEFAULT_PORT = 6980
+DEFAULT_SECONDS = 5.0
+
+
+def parse_args():
+    port = DEFAULT_PORT
+    seconds = DEFAULT_SECONDS
+    if len(sys.argv) > 1 and sys.argv[1]:
+        port = int(sys.argv[1])
+    if len(sys.argv) > 2 and sys.argv[2]:
+        seconds = float(sys.argv[2])
+    return port, seconds
+
+
+def parse_stream_name(payload: bytes):
+    if len(payload) < VBAN_HEADER_SIZE:
+        return None
+    if payload[0:4] != VBAN_MAGIC:
+        return None
+    protocol = payload[4] & 0xE0
+    if protocol != 0x00:
+        return None
+    name = payload[8:24].split(b"\x00", 1)[0].decode("utf-8", errors="replace").strip()
+    if not name:
+        return None
+    return name
+
+
+def main():
+    port, seconds = parse_args()
+    result = {
+        "ok": False,
+        "port": port,
+        "duration": seconds,
+        "streams": [],
+        "error": None,
+    }
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("0.0.0.0", port))
+    except OSError as exc:
+        result["error"] = (
+            f"Could not listen on UDP port {port}: {exc}. "
+            "Stop any active VBAN stream and try again."
+        )
+        print(json.dumps(result))
+        return 1
+
+    sock.settimeout(0.25)
+    seen = {}
+    deadline = time.time() + seconds
+
+    while time.time() < deadline:
+        try:
+            data, addr = sock.recvfrom(4096)
+        except socket.timeout:
+            continue
+        except OSError as exc:
+            result["error"] = str(exc)
+            break
+
+        stream = parse_stream_name(data)
+        if not stream:
+            continue
+
+        key = (addr[0], stream, port)
+        if key in seen:
+            seen[key]["packets"] += 1
+            continue
+
+        seen[key] = {
+            "sender": addr[0],
+            "stream": stream,
+            "port": port,
+            "protocol": "audio",
+            "packets": 1,
+        }
+
+    sock.close()
+    result["streams"] = sorted(seen.values(), key=lambda item: (item["sender"], item["stream"]))
+    result["ok"] = result["error"] is None
+    print(json.dumps(result))
+    return 0 if result["ok"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

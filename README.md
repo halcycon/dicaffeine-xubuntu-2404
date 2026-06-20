@@ -889,7 +889,7 @@ Install (or update):
 
 ```bash
 sudo APP_USER=ndi ./scripts/install-vban-manager-wyse.sh
-# UI: http://<wyse-ip>:8088/
+# Simple UI: http://<wyse-ip>:8088/audiobox.php
 ```
 
 Working receptor example:

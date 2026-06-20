@@ -1,0 +1,55 @@
+.wyse-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.wyse-muted {
+  color: #666;
+}
+
+.wyse-stream-list {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 0;
+}
+
+.wyse-stream-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.wyse-stream-list li:last-child {
+  border-bottom: none;
+}
+
+.wyse-stream-meta {
+  min-width: 0;
+}
+
+.wyse-stream-meta strong {
+  display: block;
+}
+
+.wyse-status-active {
+  color: #198754;
+  font-weight: 600;
+}
+
+.wyse-status-stopped {
+  color: #6c757d;
+}
+
+.wyse-scan-progress {
+  display: none;
+}
+
+.wyse-scan-progress.active {
+  display: block;
+}

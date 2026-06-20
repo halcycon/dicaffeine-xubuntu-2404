@@ -102,7 +102,7 @@ Two Conky panels at bottom-right:
 
 - Sender: **VoiceMeeter** or other VBAN source on the LAN (port **6980**, stream name must match exactly, case‑sensitive)
 - Receiver: `vban_receptor` from [quiniouben/vban](https://github.com/quiniouben/vban)
-- Control UI: [VBAN-manager](https://github.com/VBAN-manager/VBAN-manager) on PHP built‑in server, port **8088**, user `ndi`, **no sudo**
+- Control UI: [VBAN-manager](https://github.com/VBAN-manager/VBAN-manager) **AudioBox** page on PHP built‑in server, port **8088**, user `ndi`, **no sudo**
 
 Working Pulse/PipeWire example:
 

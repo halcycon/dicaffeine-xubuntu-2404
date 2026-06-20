@@ -112,10 +112,34 @@ if [[ ! -f "${PATCH_DIR}/action.php" || ! -f "${PATCH_DIR}/vban.sh" ]]; then
   exit 1
 fi
 
-if [[ -f "${MANAGER_DIR}/action.php" ]]; then
-  cp -a "${MANAGER_DIR}/action.php" "${MANAGER_DIR}/action.php.orig.$(date +%Y%m%d%H%M%S)"
-fi
-install -o "${APP_USER}" -g "${APP_USER}" -m 0644 "${PATCH_DIR}/action.php" "${MANAGER_DIR}/action.php"
+install_patch_file() {
+  local rel="$1"
+  local mode="${2:-0644}"
+  local src="${PATCH_DIR}/${rel}"
+  local dest="${MANAGER_DIR}/${rel}"
+  if [[ ! -f "${src}" ]]; then
+    return 0
+  fi
+  install -d -o "${APP_USER}" -g "${APP_USER}" "$(dirname "${dest}")"
+  install -o "${APP_USER}" -g "${APP_USER}" -m "${mode}" "${src}" "${dest}"
+}
+
+for patch_file in \
+  action.php \
+  modify_args.php \
+  index.php \
+  top.php \
+  server.php \
+  audiobox.php \
+  scan.php \
+  connect.php \
+  disconnect.php \
+  wyse-common.php
+do
+  install_patch_file "${patch_file}"
+done
+
+install_patch_file "css/wyse-audiobox.css"
 install -o "${APP_USER}" -g "${APP_USER}" -m 0755 "${PATCH_DIR}/vban.sh" "${MANAGER_DIR}/script/vban.sh"
 
 log "Installing shared helpers and /etc/default/wyse-vban stub"
@@ -164,9 +188,9 @@ if [ -z "${primary_ip:-}" ]; then
 fi
 
 if [ -n "${primary_ip:-}" ]; then
-  echo "VBAN-manager URL: http://${primary_ip}:${WEB_PORT}/"
+  echo "VBAN AudioBox URL: http://${primary_ip}:${WEB_PORT}/audiobox.php"
 else
-  echo "VBAN-manager URL: http://<wyse-ip>:${WEB_PORT}/"
+  echo "VBAN AudioBox URL: http://<wyse-ip>:${WEB_PORT}/audiobox.php"
 fi
 
 echo

@@ -1,0 +1,151 @@
+<?php
+include 'config.php';
+include 'wyse-common.php';
+
+$page = 'audiobox';
+$defaults = wyse_load_defaults();
+$slot = $defaults['AUDIOBOX_SLOT'] !== '' ? $defaults['AUDIOBOX_SLOT'] : '1';
+$status = wyse_server_status($slot);
+$current = wyse_read_server_args($slot);
+$receiverIp = wyse_primary_ip();
+$defaultPort = $defaults['VBAN_UDP_PORT'] !== '' ? $defaults['VBAN_UDP_PORT'] : '6980';
+
+include 'top.php';
+?>
+
+<link href="css/wyse-audiobox.css" rel="stylesheet">
+
+<div class="col-md-8">
+  <h3>VBAN AudioBox</h3>
+  <p class="wyse-muted">
+    Receive VBAN audio on this device. VoiceMeeter should send to
+    <strong><?php echo wyse_h($receiverIp !== '' ? $receiverIp : 'this device'); ?></strong>
+    on UDP port <strong><?php echo wyse_h($defaultPort); ?></strong>.
+  </p>
+
+  <div class="wyse-card">
+    <h5>Current stream</h5>
+    <?php if ($status === 'active' && isset($current['s'], $current['i'])) { ?>
+      <p class="wyse-status-active mb-1">
+        Playing <strong><?php echo wyse_h($current['s']); ?></strong>
+        from <?php echo wyse_h($current['i']); ?>:<?php echo wyse_h(isset($current['p']) ? $current['p'] : $defaultPort); ?>
+      </p>
+      <a class="btn btn-danger btn-sm" href="disconnect.php?id=<?php echo wyse_h($slot); ?>">Stop</a>
+    <?php } else { ?>
+      <p class="wyse-status-stopped mb-0">Not connected</p>
+    <?php } ?>
+  </div>
+
+  <div class="wyse-card">
+    <h5>Find streams on the network</h5>
+    <p class="wyse-muted">
+      Start VBAN output on the sender first, then scan. Scanning briefly stops any active playback on this device.
+    </p>
+    <button id="scan-btn" class="btn btn-primary" type="button">Scan for streams</button>
+    <div id="scan-progress" class="wyse-scan-progress wyse-muted mt-3">
+      Listening for VBAN packets&hellip;
+    </div>
+    <ul id="scan-results" class="wyse-stream-list mt-3"></ul>
+    <div id="scan-error" class="alert alert-warning mt-3" style="display:none;"></div>
+  </div>
+
+  <div class="wyse-card">
+    <h5>Connect manually</h5>
+    <form class="form-inline" method="get" action="connect.php">
+      <input type="hidden" name="id" value="<?php echo wyse_h($slot); ?>">
+      <div class="form-group mr-2 mb-2">
+        <label class="sr-only" for="sender">Sender IP</label>
+        <input class="form-control" type="text" id="sender" name="sender"
+               placeholder="Sender IP"
+               value="<?php echo wyse_h(isset($current['i']) ? $current['i'] : $defaults['VBAN_SENDER_IP']); ?>">
+      </div>
+      <div class="form-group mr-2 mb-2">
+        <label class="sr-only" for="stream">Stream name</label>
+        <input class="form-control" type="text" id="stream" name="stream"
+               placeholder="Stream name"
+               value="<?php echo wyse_h(isset($current['s']) ? $current['s'] : $defaults['VBAN_STREAM_NAME']); ?>">
+      </div>
+      <button class="btn btn-success mb-2" type="submit">Connect</button>
+    </form>
+  </div>
+
+  <p class="wyse-muted">
+    <a href="server.php?id=<?php echo wyse_h($slot); ?>">Advanced settings</a>
+    for backend, port, ALSA device, and extra server slots.
+  </p>
+</div>
+
+<script>
+(function () {
+  var scanBtn = document.getElementById('scan-btn');
+  var scanProgress = document.getElementById('scan-progress');
+  var scanResults = document.getElementById('scan-results');
+  var scanError = document.getElementById('scan-error');
+  var defaultPort = <?php echo json_encode($defaultPort); ?>;
+
+  function renderResults(streams) {
+    scanResults.innerHTML = '';
+    if (!streams.length) {
+      scanResults.innerHTML = '<li><span class="wyse-muted">No VBAN streams heard. Check VoiceMeeter is sending to this device.</span></li>';
+      return;
+    }
+
+    streams.forEach(function (item) {
+      var li = document.createElement('li');
+      var meta = document.createElement('div');
+      meta.className = 'wyse-stream-meta';
+      meta.innerHTML = '<strong>' + escapeHtml(item.stream) + '</strong>' +
+        '<span class="wyse-muted">from ' + escapeHtml(item.sender) + ':' + escapeHtml(String(item.port || defaultPort)) + '</span>';
+
+      var form = document.createElement('form');
+      form.method = 'get';
+      form.action = 'connect.php';
+      form.innerHTML =
+        '<input type="hidden" name="id" value="<?php echo wyse_h($slot); ?>">' +
+        '<input type="hidden" name="sender" value="' + escapeHtml(item.sender) + '">' +
+        '<input type="hidden" name="stream" value="' + escapeHtml(item.stream) + '">' +
+        '<input type="hidden" name="port" value="' + escapeHtml(String(item.port || defaultPort)) + '">' +
+        '<button class="btn btn-success btn-sm" type="submit">Connect</button>';
+
+      li.appendChild(meta);
+      li.appendChild(form);
+      scanResults.appendChild(li);
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  scanBtn.addEventListener('click', function () {
+    scanBtn.disabled = true;
+    scanProgress.classList.add('active');
+    scanError.style.display = 'none';
+    scanResults.innerHTML = '';
+
+    fetch('scan.php')
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (data.error) {
+          scanError.textContent = data.error;
+          scanError.style.display = 'block';
+        }
+        renderResults(data.streams || []);
+      })
+      .catch(function (err) {
+        scanError.textContent = 'Scan request failed: ' + err;
+        scanError.style.display = 'block';
+      })
+      .finally(function () {
+        scanBtn.disabled = false;
+        scanProgress.classList.remove('active');
+      });
+  });
+})();
+</script>
+
+<?php include 'bottom.php'; ?>

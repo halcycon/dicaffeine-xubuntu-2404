@@ -32,10 +32,17 @@ case "${1:-}" in
     echo "Started as user: $(whoami)"
     echo "vban_${args}"
 
-    # VBAN-manager stores arguments as a simple space-delimited line, e.g.:
-    #   receptor -i 192.168.1.10 -p 6980 -s Stream1 -b pulseaudio -d VBAN
-    # This deliberately does not support spaces inside stream/device names.
-    read -r -a argv <<< "${args}"
+    mapfile -t argv < <(python3 - "${args_file}" <<'PY'
+import shlex
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    line = handle.read().strip()
+argv = shlex.split(line)
+for item in argv:
+    print(item)
+PY
+)
     if [[ ${#argv[@]} -lt 1 ]]; then
       echo "No VBAN mode in ${args_file}" >&2
       exit 1
