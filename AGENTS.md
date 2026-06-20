@@ -9,10 +9,10 @@ A repeatable install kit for turning a **Dell Wyse 3040** thin client (Xubuntu 2
 | Mode | Purpose | Primary software |
 |------|---------|------------------|
 | **Setup / control** | Initial Wi‑Fi and venue network configuration | NetworkManager hotspot + local portal |
-| **Pre‑service audio** | Background music / VoiceMeeter feed before service | VBAN (`vban_receptor`) via PipeWire or ALSA |
+| **VBAN audio** | LAN audio feed (e.g. VoiceMeeter) | VBAN (`vban_receptor`) via PipeWire or ALSA |
 | **Service video** | NDI projection during service | Dicaffeine + Yuri2 SDL2/RGBA32 pipeline |
 
-**Design principle:** VBAN is **not** converted to NDI. VBAN handles pre‑service audio; Dicaffeine handles NDI video. **VBAN and Dicaffeine may run together** when audio goes through PipeWire/PulseAudio (typical case). Only stop PipeWire when using direct ALSA for VBAN.
+**Design principle:** VBAN is **not** converted to NDI. VBAN handles LAN audio playback (AudioBox); Dicaffeine handles NDI video. **VBAN and Dicaffeine may run together** when audio goes through PipeWire/PulseAudio (typical case). Only stop PipeWire when using direct ALSA for VBAN.
 
 Target operator: Adam Camp. Example hostname: `ndi-3040-01`.
 
@@ -84,7 +84,7 @@ Existing `/etc/default/wyse-vban` and `/etc/default/wyse-wifi-setup` are **never
 
 Two Conky panels at bottom-right:
 
-1. **VBAN Audio** (upper) — `wyse-vban-status`: manager URL, local receive IP/UDP port, configured streams with sender IP:port
+1. **VBAN AudioBox** (upper) — `wyse-vban-status`: manager URL, local receive IP/UDP port, configured streams with sender IP:port
 2. **Dicaffeine Receiver** (lower) — QR code + NDI status
 
 ---
@@ -98,16 +98,16 @@ Two Conky panels at bottom-right:
 - Dicaffeine **stops** during setup, **restarts** after setup
 - Minor known issue: portal does not auto‑open on phone (acceptable)
 
-### Pre‑service audio (VBAN)
+### VBAN audio (AudioBox)
 
-- Sender: **VoiceMeeter** on laptop (VBAN enabled, destination = Wyse IP, port **6980**, stream name must match exactly, case‑sensitive)
+- Sender: **VoiceMeeter** or other VBAN source on the LAN (port **6980**, stream name must match exactly, case‑sensitive)
 - Receiver: `vban_receptor` from [quiniouben/vban](https://github.com/quiniouben/vban)
 - Control UI: [VBAN-manager](https://github.com/VBAN-manager/VBAN-manager) on PHP built‑in server, port **8088**, user `ndi`, **no sudo**
 
 Working Pulse/PipeWire example:
 
 ```bash
-vban_receptor -i <LAPTOP_IP> -p 6980 -s Stream1 -b pulseaudio -d "VBAN PreService" -q 1
+vban_receptor -i <LAPTOP_IP> -p 6980 -s Stream1 -b pulseaudio -d "VBAN AudioBox" -q 1
 ```
 
 **Critical semantics:**

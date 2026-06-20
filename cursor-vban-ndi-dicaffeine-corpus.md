@@ -136,7 +136,7 @@ vban_receptor \
   -p 6980 \
   -s Stream1 \
   -b pulseaudio \
-  -d "VBAN PreService" \
+  -d "VBAN AudioBox" \
   -q 1
 ```
 
@@ -272,7 +272,7 @@ vban_receptor \
   -p 6980 \
   -s Stream1 \
   -b pulseaudio \
-  -d "VBAN PreService" \
+  -d "VBAN AudioBox" \
   -q 1
 ```
 
@@ -646,7 +646,7 @@ Likely useful changes:
 - For ALSA backend, label `-d` as ALSA device.
 - Add field/help text for `-i` explaining it should be the sender IP, not 0.0.0.0.
 - Add preset for VoiceMeeter / pre-service audio:
-  receptor -i <sender-ip> -p 6980 -s Stream1 -b pulseaudio -d VBAN_PreService
+  receptor -i <sender-ip> -p 6980 -s Stream1 -b pulseaudio -d "VBAN AudioBox"
 - Add safe USB ALSA preset once USB card name is known:
   receptor -i <sender-ip> -p 6980 -s Stream1 -b alsa -d plughw:CARD=<USB_CARD>,DEV=0
 - Avoid accepting device/stream names with spaces unless argument escaping is fixed.
@@ -688,7 +688,7 @@ vban_receptor \
   -p 6980 \
   -s Stream1 \
   -b pulseaudio \
-  -d "VBAN PreService" \
+  -d "VBAN AudioBox" \
   -q 1
 ```
 

@@ -45,6 +45,23 @@ install_config_if_missing() {
   fi
 }
 
+migrate_wyse_vban_config() {
+  local dest="/etc/default/wyse-vban"
+  if [ ! -f "$dest" ]; then
+    return 0
+  fi
+  if grep -qE '^VBAN_PULSE_LABEL=VBAN PreService$' "$dest" 2>/dev/null; then
+    echo "Migrating VBAN_PULSE_LABEL to \"VBAN AudioBox\" in ${dest}"
+    sudo sed -i 's/^VBAN_PULSE_LABEL=VBAN PreService$/VBAN_PULSE_LABEL="VBAN AudioBox"/' "$dest"
+  elif grep -qE '^VBAN_PULSE_LABEL="VBAN PreService"$' "$dest" 2>/dev/null; then
+    echo "Migrating VBAN_PULSE_LABEL to \"VBAN AudioBox\" in ${dest}"
+    sudo sed -i 's/^VBAN_PULSE_LABEL="VBAN PreService"$/VBAN_PULSE_LABEL="VBAN AudioBox"/' "$dest"
+  elif grep -qE '^VBAN_PULSE_LABEL=VBAN AudioBox$' "$dest" 2>/dev/null; then
+    echo "Fixing unquoted VBAN_PULSE_LABEL in ${dest}"
+    sudo sed -i 's/^VBAN_PULSE_LABEL=VBAN AudioBox$/VBAN_PULSE_LABEL="VBAN AudioBox"/' "$dest"
+  fi
+}
+
 echo "== Installing shared helpers =="
 
 for helper in \
@@ -62,6 +79,7 @@ echo "== Installing default config stubs (only if missing) =="
 
 install_config_if_missing wyse-wifi-setup.default
 install_config_if_missing wyse-vban.default
+migrate_wyse_vban_config
 
 if [ "$UPDATE_MODE" = "1" ]; then
   echo "Update mode: left existing /etc/default/* files unchanged."

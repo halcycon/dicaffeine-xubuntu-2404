@@ -881,7 +881,7 @@ Edit `/etc/default/wyse-vban` for sender IP, stream name, and manager bind addre
 
 ---
 
-## VBAN Pre-Service Audio
+## VBAN AudioBox
 
 VBAN runs alongside Dicaffeine when using the PulseAudio/PipeWire backend.
 
@@ -895,7 +895,7 @@ sudo APP_USER=ndi ./scripts/install-vban-manager-wyse.sh
 Working receptor example:
 
 ```bash
-vban_receptor -i <LAPTOP_IP> -p 6980 -s Stream1 -b pulseaudio -d "VBAN PreService" -q 1
+vban_receptor -i <LAPTOP_IP> -p 6980 -s Stream1 -b pulseaudio -d "VBAN AudioBox" -q 1
 ```
 
 - `-i` is the **sender** laptop IP, not `0.0.0.0`

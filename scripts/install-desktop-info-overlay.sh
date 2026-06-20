@@ -70,7 +70,7 @@ conky.config = {
 };
 
 conky.text = [[
-${font DejaVu Sans:bold:size=13}${color2}VBAN Audio${color}${font}
+${font DejaVu Sans:bold:size=13}${color2}VBAN AudioBox${color}${font}
 ${execi 5 /usr/local/bin/wyse-vban-status}
 ]];
 EOF
