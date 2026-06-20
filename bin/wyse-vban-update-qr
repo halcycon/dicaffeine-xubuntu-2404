@@ -11,7 +11,6 @@ QR_FILE="${QR_DIR}/vban-audiobox-qr.png"
 URL_FILE="${QR_DIR}/vban-audiobox-url.txt"
 META_FILE="${QR_DIR}/vban-audiobox-qr.meta"
 MANAGER_PORT="${VBAN_MANAGER_PORT:-8088}"
-CAPTION="Scan to Control"
 
 mkdir -p "$QR_DIR" 2>/dev/null || true
 
@@ -30,21 +29,14 @@ else
   display_target="http://$(hostname -s).local:${MANAGER_PORT}/audiobox.php"
 fi
 
-CAPTION_VERSION=2
-meta_key="${display_target}|${CAPTION}|v${CAPTION_VERSION}"
+meta_key="${display_target}|qr4"
 old_meta=""
 if [ -f "$META_FILE" ]; then
   old_meta="$(cat "$META_FILE" 2>/dev/null || true)"
 fi
 
-needs_regen=false
 if [ "$meta_key" != "$old_meta" ] || [ ! -s "$QR_FILE" ]; then
-  needs_regen=true
-fi
-
-if [ "$needs_regen" = true ]; then
-  qrencode -o "$QR_FILE" -s 5 -m 2 "$display_target"
-  wyse-qr-compose-caption "$QR_FILE" "$CAPTION" || true
+  qrencode -o "$QR_FILE" -s 4 -m 1 "$display_target"
 
   printf '%s\n' "$meta_key" > "$META_FILE"
   printf '%s\n' "$display_target" > "$URL_FILE"

@@ -37,7 +37,6 @@ fi
 if [ "$mode" = "setup" ]; then
   setup_ssid="${WYSE_WIFI_SETUP_SSID:-Dicaffeine-Setup}"
   setup_passphrase="${WYSE_WIFI_SETUP_PASSPHRASE:-dicaffeine}"
-  caption="Scan to configure WiFi"
 
   esc_ssid="$(printf '%s' "$setup_ssid" | wifi_qr_escape)"
   esc_pass="$(printf '%s' "$setup_passphrase" | wifi_qr_escape)"
@@ -45,8 +44,6 @@ if [ "$mode" = "setup" ]; then
   qr_payload="WIFI:T:WPA;S:${esc_ssid};P:${esc_pass};;"
   display_target="SETUP_WIFI:${setup_ssid}"
 else
-  caption="Scan to Control"
-
   primary_ip="$(
     ip -4 route get 1.1.1.1 2>/dev/null |
       awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
@@ -65,21 +62,14 @@ else
   fi
 fi
 
-CAPTION_VERSION=2
-meta_key="${display_target}|${caption}|v${CAPTION_VERSION}"
+meta_key="${display_target}|qr4"
 old_meta=""
 if [ -f "$META_FILE" ]; then
   old_meta="$(cat "$META_FILE" 2>/dev/null || true)"
 fi
 
-needs_regen=false
 if [ "$meta_key" != "$old_meta" ] || [ ! -s "$QR_FILE" ]; then
-  needs_regen=true
-fi
-
-if [ "$needs_regen" = true ]; then
-  qrencode -o "$QR_FILE" -s 5 -m 2 "$qr_payload"
-  wyse-qr-compose-caption "$QR_FILE" "$caption" || true
+  qrencode -o "$QR_FILE" -s 4 -m 1 "$qr_payload"
 
   printf '%s\n' "$meta_key" > "$META_FILE"
   printf '%s\n' "$display_target" > "$URL_FILE"

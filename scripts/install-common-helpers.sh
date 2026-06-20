@@ -79,7 +79,6 @@ for helper in \
   wyse-ndi-status \
   wyse-ndi-update-qr \
   wyse-ndi-qr-caption \
-  wyse-qr-compose-caption \
   wyse-vban-status \
   wyse-vban-update-qr \
   wyse-vban-qr-caption \
