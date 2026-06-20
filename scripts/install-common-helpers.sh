@@ -69,6 +69,7 @@ for helper in \
   wyse-ndi-update-qr \
   wyse-vban-status \
   wyse-vban-scan \
+  wyse-vban-parse-args \
   vban-box-audio-info \
   vban-box-stop-pipewire \
   vban-box-start-pipewire

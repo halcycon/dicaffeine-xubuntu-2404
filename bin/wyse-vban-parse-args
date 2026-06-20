@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""Parse a vban.sh args-N.txt line into JSON (handles quoted values)."""
+
+import json
+import shlex
+import sys
+
+
+def parse_line(line: str):
+    argv = shlex.split(line.strip())
+    out = {"raw": line.strip(), "type": argv[0] if argv else ""}
+    i = 1
+    while i < len(argv):
+        token = argv[i]
+        if token.startswith("-") and len(token) == 2 and i + 1 < len(argv):
+            out[token[1]] = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+    return out
+
+
+def main():
+    line = sys.stdin.read()
+    print(json.dumps(parse_line(line)))
+
+
+if __name__ == "__main__":
+    main()

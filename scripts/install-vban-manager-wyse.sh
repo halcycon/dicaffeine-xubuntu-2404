@@ -134,6 +134,7 @@ for patch_file in \
   scan.php \
   connect.php \
   disconnect.php \
+  status-api.php \
   wyse-common.php
 do
   install_patch_file "${patch_file}"

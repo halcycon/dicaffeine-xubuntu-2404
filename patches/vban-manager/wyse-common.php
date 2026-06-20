@@ -48,23 +48,46 @@ function wyse_primary_ip()
 
 function wyse_vban_sh($command)
 {
-    global $script, $script_sh;
+    global $script;
     chdir($script);
     return shell_exec('./vban.sh ' . $command . ' 2>&1');
 }
 
 function wyse_server_status($id)
 {
-    global $script, $script_sh;
+    global $script;
     chdir($script);
-    $status = shell_exec('./vban.sh is-active ' . escapeshellarg($id) . ' 2>&1');
-    if (strpos($status, 'active') !== false && strpos($status, 'inactive') === false) {
+    $status = trim(shell_exec('./vban.sh is-active ' . escapeshellarg($id) . ' 2>&1') ?? '');
+
+    if ($status === 'active') {
         return 'active';
     }
-    if (strpos($status, 'inactive') !== false) {
+    if ($status === 'activating') {
+        return 'activating';
+    }
+    if ($status === 'failed' || $status === 'auto-restart') {
+        return 'failed';
+    }
+    if ($status === 'inactive') {
         return 'stopped';
     }
     return 'unknown';
+}
+
+function wyse_parse_args_line($line)
+{
+    $line = trim($line);
+    if ($line === '') {
+        return array();
+    }
+
+    $cmd = 'printf %s ' . escapeshellarg($line) . ' | /usr/local/bin/wyse-vban-parse-args 2>/dev/null';
+    $json = trim(shell_exec($cmd) ?? '');
+    $parsed = json_decode($json, true);
+    if (!is_array($parsed)) {
+        return array('raw' => $line);
+    }
+    return $parsed;
 }
 
 function wyse_read_server_args($id)
@@ -74,24 +97,7 @@ function wyse_read_server_args($id)
     if (!is_readable($file)) {
         return array();
     }
-
-    $line = trim(file_get_contents($file));
-    if ($line === '') {
-        return array();
-    }
-
-    $parsed = array('raw' => $line);
-    if (preg_match('/^(\S+)/', $line, $typeMatch)) {
-        $parsed['type'] = $typeMatch[1];
-    }
-
-    if (preg_match_all('/-([a-z]) ([^ ]+)/', $line . ' ', $matches)) {
-        for ($i = 0; $i < count($matches[1]); $i++) {
-            $parsed[$matches[1][$i]] = $matches[2][$i];
-        }
-    }
-
-    return $parsed;
+    return wyse_parse_args_line(file_get_contents($file));
 }
 
 function wyse_list_servers()
@@ -112,10 +118,51 @@ function wyse_list_servers()
 function wyse_stop_all_streams()
 {
     foreach (wyse_list_servers() as $server) {
-        if ($server['status'] === 'active') {
+        $state = wyse_server_status($server['id']);
+        if ($state === 'active' || $state === 'activating') {
             wyse_vban_sh('stop ' . escapeshellarg($server['id']));
         }
     }
+}
+
+function wyse_service_journal($id, $lines = 15)
+{
+    $unit = 'vban@' . $id . '.service';
+    return trim(shell_exec(
+        'journalctl --user -u ' . escapeshellarg($unit) . ' -n ' . (int)$lines . ' --no-pager 2>&1'
+    ) ?? '');
+}
+
+function wyse_scan_streams($port, $seconds, $sender_filter = '')
+{
+    $cmd = '/usr/local/bin/wyse-vban-scan '
+        . escapeshellarg((string)$port) . ' '
+        . escapeshellarg((string)$seconds);
+    if ($sender_filter !== '') {
+        $cmd .= ' ' . escapeshellarg($sender_filter);
+    }
+
+    $data = json_decode(trim(shell_exec($cmd . ' 2>&1') ?? ''), true);
+    if (!is_array($data)) {
+        return array('streams' => array(), 'error' => 'Scan failed');
+    }
+    return $data;
+}
+
+function wyse_wait_service($id, $timeout = 4.0)
+{
+    $deadline = microtime(true) + $timeout;
+    while (microtime(true) < $deadline) {
+        $state = wyse_server_status($id);
+        if ($state === 'active') {
+            return 'active';
+        }
+        if ($state === 'failed') {
+            return 'failed';
+        }
+        usleep(250000);
+    }
+    return wyse_server_status($id);
 }
 
 function wyse_quote_arg($value)
@@ -159,19 +206,75 @@ function wyse_connect_stream($id, $sender, $stream, $port, $defaults)
     $stream = trim($stream);
     $port = trim((string)$port);
 
-    if ($sender === '' || $stream === '') {
-        return 'Sender IP and stream name are required.';
-    }
     if ($port === '') {
         $port = $defaults['VBAN_UDP_PORT'] !== '' ? $defaults['VBAN_UDP_PORT'] : '6980';
     }
 
     wyse_vban_sh('stop ' . escapeshellarg($id));
+    usleep(300000);
+
+    if ($stream === '') {
+        $seconds = $defaults['VBAN_SCAN_SECONDS'] !== '' ? (float)$defaults['VBAN_SCAN_SECONDS'] : 5.0;
+        $scan = wyse_scan_streams($port, $seconds, $sender);
+        if (!empty($scan['error']) && empty($scan['streams'])) {
+            return 'Could not scan for VBAN streams: ' . $scan['error'];
+        }
+
+        $streams = $scan['streams'] ?? array();
+        if (empty($streams)) {
+            return 'No VBAN stream heard on port ' . $port . '. Start VoiceMeeter VBAN output to this device, then use Scan or enter the stream name manually.';
+        }
+
+        $chosen = $streams[0];
+        if ($sender !== '') {
+            foreach ($streams as $item) {
+                if ($item['sender'] === $sender) {
+                    $chosen = $item;
+                    break;
+                }
+            }
+        } else {
+            $sender = $chosen['sender'];
+        }
+        $stream = $chosen['stream'];
+    }
+
+    if ($sender === '') {
+        return 'Sender IP is required when the stream name is entered manually.';
+    }
+
     $line = wyse_build_receptor_line($sender, $stream, $port, $defaults);
     file_put_contents($args . $id . '.txt', $line . "\n");
     wyse_vban_sh('start ' . escapeshellarg($id));
 
+    $final = wyse_wait_service($id);
+    if ($final !== 'active') {
+        $log = wyse_service_journal($id, 8);
+        $hint = 'Stream name must match VoiceMeeter exactly (case-sensitive).';
+        if ($log !== '') {
+            return 'VBAN receptor exited (' . $final . '). ' . $hint . ' Log: ' . preg_replace('/\s+/', ' ', $log);
+        }
+        return 'VBAN receptor did not stay running (' . $final . '). ' . $hint;
+    }
+
     return null;
+}
+
+function wyse_connect_result($id, $sender, $stream, $port, $defaults)
+{
+    $error = wyse_connect_stream($id, $sender, $stream, $port, $defaults);
+    $argsParsed = wyse_read_server_args($id);
+    $state = wyse_server_status($id);
+
+    return array(
+        'ok' => $error === null,
+        'error' => $error,
+        'state' => $state,
+        'sender' => isset($argsParsed['i']) ? $argsParsed['i'] : $sender,
+        'stream' => isset($argsParsed['s']) ? $argsParsed['s'] : $stream,
+        'port' => isset($argsParsed['p']) ? $argsParsed['p'] : $port,
+        'journal' => ($state === 'failed') ? wyse_service_journal($id, 10) : '',
+    );
 }
 
 function wyse_h($value)

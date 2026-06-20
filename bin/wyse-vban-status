@@ -58,38 +58,32 @@ def run(cmd):
         return ""
 
 def parse_args(line):
-    tokens = line.strip().split()
-    if not tokens:
-        return None
-    if tokens[0] != "receptor":
-        return {"mode": tokens[0], "raw": line.strip()}
+    import json
+    import subprocess
 
-    out = {"mode": "receptor", "sender": "", "port": default_port, "stream": default_stream, "backend": "", "device": ""}
-    i = 1
-    while i < len(tokens):
-        tok = tokens[i]
-        if tok in ("-i", "--ip") and i + 1 < len(tokens):
-            out["sender"] = tokens[i + 1]
-            i += 2
-            continue
-        if tok in ("-p", "--port") and i + 1 < len(tokens):
-            out["port"] = tokens[i + 1]
-            i += 2
-            continue
-        if tok in ("-s", "--streamname") and i + 1 < len(tokens):
-            out["stream"] = tokens[i + 1]
-            i += 2
-            continue
-        if tok in ("-b", "--backend") and i + 1 < len(tokens):
-            out["backend"] = tokens[i + 1]
-            i += 2
-            continue
-        if tok in ("-d", "--device") and i + 1 < len(tokens):
-            out["device"] = tokens[i + 1]
-            i += 2
-            continue
-        i += 1
-    return out
+    try:
+        proc = subprocess.run(
+            ["/usr/local/bin/wyse-vban-parse-args"],
+            input=line,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        data = json.loads(proc.stdout)
+    except Exception:
+        return None
+
+    if data.get("type") != "receptor":
+        return {"mode": data.get("type", "vban"), "raw": line.strip()}
+
+    return {
+        "mode": "receptor",
+        "sender": data.get("i", ""),
+        "port": data.get("p", default_port),
+        "stream": data.get("s", default_stream),
+        "backend": data.get("b", ""),
+        "device": data.get("d", ""),
+    }
 
 streams = []
 if os.path.isdir(script_dir):
