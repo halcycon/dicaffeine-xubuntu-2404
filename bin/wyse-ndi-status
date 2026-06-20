@@ -13,6 +13,16 @@ if [ -f "$STATE_FILE" ]; then
   . "$STATE_FILE" || true
 fi
 
+wyse_overlay_clip() {
+  local line="$1"
+  local max="${2:-48}"
+  if ((${#line} > max)); then
+    printf '%s…\n' "${line:0:$((max - 1))}"
+  else
+    printf '%s\n' "$line"
+  fi
+}
+
 if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
   if [ "${WYSE_WIFI_SETUP_CONNECTING:-0}" = "1" ]; then
     echo "Wi-Fi Setup"
@@ -73,9 +83,9 @@ if [ -z "$dicaffeine_state" ]; then
 fi
 
 echo "Host: ${host}"
-echo "Web:  ${web_url}"
-echo "WiFi: ${wifi_ssid}"
-echo "Dicaffeine: ${dicaffeine_state}"
+wyse_overlay_clip "Web:  ${web_url}"
+wyse_overlay_clip "WiFi: ${wifi_ssid}"
+wyse_overlay_clip "Dicaffeine: ${dicaffeine_state}"
 echo
 echo "IP addresses:"
 

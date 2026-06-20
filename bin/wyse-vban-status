@@ -12,6 +12,16 @@ VBAN_UDP_PORT="${VBAN_UDP_PORT:-6980}"
 DEFAULT_STREAM="${VBAN_STREAM_NAME:-Stream1}"
 DEFAULT_SENDER="${VBAN_SENDER_IP:-}"
 
+wyse_overlay_clip() {
+  local line="$1"
+  local max="${2:-48}"
+  if ((${#line} > max)); then
+    printf '%s…\n' "${line:0:$((max - 1))}"
+  else
+    printf '%s\n' "$line"
+  fi
+}
+
 primary_ip="$(
   ip -4 route get 1.1.1.1 2>/dev/null |
     awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
@@ -30,18 +40,17 @@ if [ -z "$mgr_state" ]; then
 fi
 
 if [ -n "${primary_ip:-}" ]; then
-  echo "Recv: ${primary_ip} udp/${VBAN_UDP_PORT}"
+  wyse_overlay_clip "Recv: ${primary_ip} udp/${VBAN_UDP_PORT}"
 else
-  echo "Recv: (no IP) udp/${VBAN_UDP_PORT}"
+  wyse_overlay_clip "Recv: (no IP) udp/${VBAN_UDP_PORT}"
 fi
 
 if [ -n "${primary_ip:-}" ]; then
-  echo "Mgr:  http://${primary_ip}:${MANAGER_PORT}/"
-  echo "      ${mgr_state}"
+  wyse_overlay_clip "Mgr:  http://${primary_ip}:${MANAGER_PORT}/"
 else
-  echo "Mgr:  :${MANAGER_PORT}/"
-  echo "      ${mgr_state}"
+  wyse_overlay_clip "Mgr:  :${MANAGER_PORT}/"
 fi
+wyse_overlay_clip "      ${mgr_state}" 40
 
 python3 - "$MANAGER_DIR" "$DEFAULT_SENDER" "$DEFAULT_STREAM" "$VBAN_UDP_PORT" <<'PY'
 import glob

@@ -75,10 +75,11 @@ conky.config = {
 
 conky.text = [[
 ${execi 10 /usr/local/bin/wyse-vban-update-qr >/dev/null 2>&1}
+${voffset 134}${goto 390}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-vban-qr-caption}${color}${font}
+${voffset -134}${goto 0}
 ${font DejaVu Sans:bold:size=13}${color2}VBAN AudioBox${color}${font}
-${alignr}${image /tmp/vban-audiobox-qr.png -s 96x96}
-${alignr}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-vban-qr-caption}${color}${font}
-${voffset 4}${font DejaVu Sans Mono:size=10}${execi 5 /usr/local/bin/wyse-vban-status}${font}
+${font DejaVu Sans Mono:size=10}${execi 5 /usr/local/bin/wyse-vban-status}${font}
+${image /tmp/vban-audiobox-qr.png -p 390,34 -s 96x96}
 ]];
 EOF
 
@@ -123,10 +124,11 @@ conky.config = {
 
 conky.text = [[
 ${execi 10 /usr/local/bin/wyse-ndi-update-qr >/dev/null 2>&1}
+${voffset 134}${goto 390}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-ndi-qr-caption}${color}${font}
+${voffset -134}${goto 0}
 ${font DejaVu Sans:bold:size=13}${color2}Dicaffeine Receiver${color}${font}
-${alignr}${image /tmp/dicaffeine-webui-qr.png -s 96x96}
-${alignr}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-ndi-qr-caption}${color}${font}
-${voffset 4}${font DejaVu Sans Mono:size=10}${execi 10 /usr/local/bin/wyse-ndi-status}${font}
+${font DejaVu Sans Mono:size=10}${execi 10 /usr/local/bin/wyse-ndi-status}${font}
+${image /tmp/dicaffeine-webui-qr.png -p 390,34 -s 96x96}
 ]];
 EOF
 
