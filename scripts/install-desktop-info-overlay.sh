@@ -59,12 +59,12 @@ conky.config = {
     color1 = '9CDCFE',
     color2 = 'FFD866',
 
-    minimum_width = 430,
-    minimum_height = 195,
-    maximum_width = 430,
+    minimum_width = 500,
+    minimum_height = 210,
+    maximum_width = 500,
 
     gap_x = 20,
-    gap_y = 245,
+    gap_y = 260,
 
     border_inner_margin = 14,
     border_outer_margin = 0,
@@ -74,7 +74,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-vban-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}VBAN AudioBox${color}${font}
 ${execi 5 /usr/local/bin/wyse-vban-status}
-${image /tmp/vban-audiobox-qr.png -p 300,38 -s 110x122}
+${image /tmp/vban-audiobox-qr.png -p 376,38 -s 110x122}
 ]];
 EOF
 
@@ -106,9 +106,9 @@ conky.config = {
     color1 = '9CDCFE',
     color2 = 'A6E22E',
 
-    minimum_width = 430,
-    minimum_height = 195,
-    maximum_width = 430,
+    minimum_width = 500,
+    minimum_height = 210,
+    maximum_width = 500,
 
     gap_x = 20,
     gap_y = 20,
@@ -121,7 +121,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-ndi-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}Dicaffeine Receiver${color}${font}
 ${execi 10 /usr/local/bin/wyse-ndi-status}
-${image /tmp/dicaffeine-webui-qr.png -p 300,38 -s 110x122}
+${image /tmp/dicaffeine-webui-qr.png -p 376,38 -s 110x122}
 ]];
 EOF
 

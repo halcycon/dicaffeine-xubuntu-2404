@@ -36,9 +36,11 @@ else
 fi
 
 if [ -n "${primary_ip:-}" ]; then
-  echo "Mgr:  http://${primary_ip}:${MANAGER_PORT}/ (${mgr_state})"
+  echo "Mgr:  http://${primary_ip}:${MANAGER_PORT}/"
+  echo "      ${mgr_state}"
 else
-  echo "Mgr:  :${MANAGER_PORT}/ (${mgr_state})"
+  echo "Mgr:  :${MANAGER_PORT}/"
+  echo "      ${mgr_state}"
 fi
 
 python3 - "$MANAGER_DIR" "$DEFAULT_SENDER" "$DEFAULT_STREAM" "$VBAN_UDP_PORT" <<'PY'
