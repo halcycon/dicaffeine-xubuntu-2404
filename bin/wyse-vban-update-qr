@@ -30,17 +30,21 @@ else
   display_target="http://$(hostname -s).local:${MANAGER_PORT}/audiobox.php"
 fi
 
-meta_key="${display_target}|${CAPTION}"
+CAPTION_VERSION=2
+meta_key="${display_target}|${CAPTION}|v${CAPTION_VERSION}"
 old_meta=""
 if [ -f "$META_FILE" ]; then
   old_meta="$(cat "$META_FILE" 2>/dev/null || true)"
 fi
 
+needs_regen=false
 if [ "$meta_key" != "$old_meta" ] || [ ! -s "$QR_FILE" ]; then
+  needs_regen=true
+fi
+
+if [ "$needs_regen" = true ]; then
   qrencode -o "$QR_FILE" -s 5 -m 2 "$display_target"
-  if command -v wyse-qr-compose-caption >/dev/null 2>&1; then
-    wyse-qr-compose-caption "$QR_FILE" "$CAPTION" || true
-  fi
+  wyse-qr-compose-caption "$QR_FILE" "$CAPTION" || true
 
   printf '%s\n' "$meta_key" > "$META_FILE"
   printf '%s\n' "$display_target" > "$URL_FILE"

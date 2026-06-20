@@ -23,6 +23,11 @@ if [ "$UPDATE_MODE" != "1" ] || ! command -v conky >/dev/null 2>&1; then
     iproute2
 else
   echo "== Update mode: conky already installed; refreshing overlay configs =="
+  if ! command -v convert >/dev/null 2>&1 && ! command -v magick >/dev/null 2>&1; then
+    echo "== Installing imagemagick for QR captions =="
+    sudo apt update
+    sudo apt install --no-install-recommends -y imagemagick fonts-dejavu-core
+  fi
 fi
 
 UPDATE_MODE="$UPDATE_MODE" TARGET_USER="$TARGET_USER" bash "${KIT_ROOT}/scripts/install-common-helpers.sh"
@@ -60,11 +65,11 @@ conky.config = {
     color2 = 'FFD866',
 
     minimum_width = 500,
-    minimum_height = 210,
+    minimum_height = 220,
     maximum_width = 500,
 
     gap_x = 20,
-    gap_y = 260,
+    gap_y = 270,
 
     border_inner_margin = 14,
     border_outer_margin = 0,
@@ -74,7 +79,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-vban-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}VBAN AudioBox${color}${font}
 ${execi 5 /usr/local/bin/wyse-vban-status}
-${image /tmp/vban-audiobox-qr.png -p 376,38 -s 110x122}
+${image /tmp/vban-audiobox-qr.png -p 376,38}
 ]];
 EOF
 
@@ -107,7 +112,7 @@ conky.config = {
     color2 = 'A6E22E',
 
     minimum_width = 500,
-    minimum_height = 210,
+    minimum_height = 220,
     maximum_width = 500,
 
     gap_x = 20,
@@ -121,7 +126,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-ndi-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}Dicaffeine Receiver${color}${font}
 ${execi 10 /usr/local/bin/wyse-ndi-status}
-${image /tmp/dicaffeine-webui-qr.png -p 376,38 -s 110x122}
+${image /tmp/dicaffeine-webui-qr.png -p 376,38}
 ]];
 EOF
 

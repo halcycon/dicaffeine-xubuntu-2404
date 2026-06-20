@@ -9,21 +9,27 @@ if [ -z "$qr_file" ] || [ -z "$caption" ]; then
   exit 2
 fi
 
-if ! command -v convert >/dev/null 2>&1; then
-  exit 0
-fi
-
 if [ ! -s "$qr_file" ]; then
+  echo "wyse-qr-compose-caption: missing ${qr_file}" >&2
   exit 1
 fi
 
-tmp="$(mktemp "${qr_file}.XXXXXX")"
+im_cmd=""
+if command -v magick >/dev/null 2>&1; then
+  im_cmd="magick"
+elif command -v convert >/dev/null 2>&1; then
+  im_cmd="convert"
+else
+  echo "wyse-qr-compose-caption: imagemagick not installed" >&2
+  exit 0
+fi
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
 cp "$qr_file" "$tmp"
 
-convert "$tmp" \
-  \( -background none -fill '#9CDCFE' -font DejaVu-Sans -pointsize 8 \
+"$im_cmd" "$tmp" \
+  \( -background '#00000099' -fill '#9CDCFE' -font DejaVu-Sans -pointsize 9 \
      -size 108x caption:"${caption}" \) \
   -gravity south -append \
   "$qr_file"
-
-rm -f "$tmp"
