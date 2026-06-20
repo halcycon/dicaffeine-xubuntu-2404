@@ -18,6 +18,7 @@ if [ "$UPDATE_MODE" != "1" ] || ! command -v conky >/dev/null 2>&1; then
   sudo apt install --no-install-recommends -y \
     conky-all \
     qrencode \
+    imagemagick \
     fonts-dejavu-core \
     iproute2
 else
@@ -73,8 +74,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-vban-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}VBAN AudioBox${color}${font}
 ${execi 5 /usr/local/bin/wyse-vban-status}
-${voffset 4}${alignr}${image /tmp/vban-audiobox-qr.png -s 100x100}
-${voffset 2}${alignr}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-vban-qr-caption}${color}${font}
+${image /tmp/vban-audiobox-qr.png -p 300,38 -s 110x122}
 ]];
 EOF
 
@@ -121,8 +121,7 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-ndi-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}Dicaffeine Receiver${color}${font}
 ${execi 10 /usr/local/bin/wyse-ndi-status}
-${voffset 4}${alignr}${image /tmp/dicaffeine-webui-qr.png -s 100x100}
-${voffset 2}${alignr}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-ndi-qr-caption}${color}${font}
+${image /tmp/dicaffeine-webui-qr.png -p 300,38 -s 110x122}
 ]];
 EOF
 

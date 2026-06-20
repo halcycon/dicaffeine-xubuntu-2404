@@ -9,7 +9,9 @@ fi
 QR_DIR="${QR_DIR:-/var/lib/wyse-ndi}"
 QR_FILE="${QR_DIR}/vban-audiobox-qr.png"
 URL_FILE="${QR_DIR}/vban-audiobox-url.txt"
+META_FILE="${QR_DIR}/vban-audiobox-qr.meta"
 MANAGER_PORT="${VBAN_MANAGER_PORT:-8088}"
+CAPTION="Scan to Control"
 
 mkdir -p "$QR_DIR" 2>/dev/null || true
 
@@ -28,21 +30,27 @@ else
   display_target="http://$(hostname -s).local:${MANAGER_PORT}/audiobox.php"
 fi
 
-old_target=""
-if [ -f "$URL_FILE" ]; then
-  old_target="$(cat "$URL_FILE" 2>/dev/null || true)"
+meta_key="${display_target}|${CAPTION}"
+old_meta=""
+if [ -f "$META_FILE" ]; then
+  old_meta="$(cat "$META_FILE" 2>/dev/null || true)"
 fi
 
-if [ "$display_target" != "$old_target" ] || [ ! -s "$QR_FILE" ]; then
-  printf '%s\n' "$display_target" > "$URL_FILE"
+if [ "$meta_key" != "$old_meta" ] || [ ! -s "$QR_FILE" ]; then
   qrencode -o "$QR_FILE" -s 5 -m 2 "$display_target"
+  if command -v wyse-qr-compose-caption >/dev/null 2>&1; then
+    wyse-qr-compose-caption "$QR_FILE" "$CAPTION" || true
+  fi
+
+  printf '%s\n' "$meta_key" > "$META_FILE"
+  printf '%s\n' "$display_target" > "$URL_FILE"
 
   target_user="${TARGET_USER:-$(id -un)}"
   if [ "$(id -u)" -eq 0 ]; then
-    chown "${target_user}:${target_user}" "$QR_FILE" "$URL_FILE" 2>/dev/null || true
+    chown "${target_user}:${target_user}" "$QR_FILE" "$URL_FILE" "$META_FILE" 2>/dev/null || true
   fi
 
-  chmod 0644 "$QR_FILE" "$URL_FILE" 2>/dev/null || true
+  chmod 0644 "$QR_FILE" "$URL_FILE" "$META_FILE" 2>/dev/null || true
 fi
 
 ln -sf "$QR_FILE" /tmp/vban-audiobox-qr.png 2>/dev/null || true

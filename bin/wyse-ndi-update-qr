@@ -10,6 +10,7 @@ STATE_FILE="/run/wyse-wifi-setup/state"
 QR_DIR="${QR_DIR:-/var/lib/wyse-ndi}"
 QR_FILE="${QR_DIR}/dicaffeine-webui-qr.png"
 URL_FILE="${QR_DIR}/dicaffeine-webui-url.txt"
+META_FILE="${QR_DIR}/dicaffeine-webui-qr.meta"
 
 mkdir -p "$QR_DIR" 2>/dev/null || true
 
@@ -36,6 +37,7 @@ fi
 if [ "$mode" = "setup" ]; then
   setup_ssid="${WYSE_WIFI_SETUP_SSID:-Dicaffeine-Setup}"
   setup_passphrase="${WYSE_WIFI_SETUP_PASSPHRASE:-dicaffeine}"
+  caption="Scan to configure WiFi"
 
   esc_ssid="$(printf '%s' "$setup_ssid" | wifi_qr_escape)"
   esc_pass="$(printf '%s' "$setup_passphrase" | wifi_qr_escape)"
@@ -43,6 +45,8 @@ if [ "$mode" = "setup" ]; then
   qr_payload="WIFI:T:WPA;S:${esc_ssid};P:${esc_pass};;"
   display_target="SETUP_WIFI:${setup_ssid}"
 else
+  caption="Scan to Control"
+
   primary_ip="$(
     ip -4 route get 1.1.1.1 2>/dev/null |
       awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}'
@@ -61,24 +65,29 @@ else
   fi
 fi
 
-old_target=""
-if [ -f "$URL_FILE" ]; then
-  old_target="$(cat "$URL_FILE" 2>/dev/null || true)"
+meta_key="${display_target}|${caption}"
+old_meta=""
+if [ -f "$META_FILE" ]; then
+  old_meta="$(cat "$META_FILE" 2>/dev/null || true)"
 fi
 
-if [ "$display_target" != "$old_target" ] || [ ! -s "$QR_FILE" ]; then
-  printf '%s\n' "$display_target" > "$URL_FILE"
+if [ "$meta_key" != "$old_meta" ] || [ ! -s "$QR_FILE" ]; then
   qrencode -o "$QR_FILE" -s 5 -m 2 "$qr_payload"
+  if command -v wyse-qr-compose-caption >/dev/null 2>&1; then
+    wyse-qr-compose-caption "$QR_FILE" "$caption" || true
+  fi
+
+  printf '%s\n' "$meta_key" > "$META_FILE"
+  printf '%s\n' "$display_target" > "$URL_FILE"
 
   target_user="${TARGET_USER:-$(id -un)}"
   if [ "$(id -u)" -eq 0 ]; then
-    chown "${target_user}:${target_user}" "$QR_FILE" "$URL_FILE" 2>/dev/null || true
+    chown "${target_user}:${target_user}" "$QR_FILE" "$URL_FILE" "$META_FILE" 2>/dev/null || true
   fi
 
-  chmod 0644 "$QR_FILE" "$URL_FILE" 2>/dev/null || true
+  chmod 0644 "$QR_FILE" "$URL_FILE" "$META_FILE" 2>/dev/null || true
 fi
 
-# Keep /tmp symlinks working for older conky configs.
 ln -sf "$QR_FILE" /tmp/dicaffeine-webui-qr.png 2>/dev/null || true
 ln -sf "$URL_FILE" /tmp/dicaffeine-webui-url.txt 2>/dev/null || true
 
