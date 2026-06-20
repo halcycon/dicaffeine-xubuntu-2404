@@ -1,15 +1,23 @@
 [Unit]
 Description=VBAN stream %i
-After=default.target
+After=default.target pipewire.service pipewire-pulse.service wireplumber.service
+Wants=pipewire-pulse.service wireplumber.service
 
 [Service]
 Type=simple
 WorkingDirectory=@MANAGER_DIR@/script
+Environment=XDG_RUNTIME_DIR=/run/user/@APP_UID@
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@APP_UID@/bus
+Environment=PULSE_SERVER=unix:/run/user/@APP_UID@/pulse/native
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStartPre=/bin/bash -c 'systemctl --user start pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service wireplumber.service 2>/dev/null || true'
 ExecStart=/bin/bash @MANAGER_DIR@/script/vban.sh start-service %i
 Restart=on-failure
 RestartSec=3
 StartLimitIntervalSec=120
-StartLimitBurst=5
+StartLimitBurst=3
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=default.target

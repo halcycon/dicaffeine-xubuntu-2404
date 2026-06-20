@@ -1,11 +1,15 @@
 [Unit]
 Description=VBAN Manager lightweight web UI
-After=default.target network-online.target
+After=default.target network-online.target pipewire-pulse.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=@MANAGER_DIR@
+Environment=XDG_RUNTIME_DIR=/run/user/@APP_UID@
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@APP_UID@/bus
+Environment=PULSE_SERVER=unix:/run/user/@APP_UID@/pulse/native
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/php -S @BIND_ADDR@:@WEB_PORT@ -t @MANAGER_DIR@
 Restart=on-failure
 RestartSec=2

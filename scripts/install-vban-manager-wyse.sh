@@ -154,14 +154,14 @@ install -d -o "${APP_USER}" -g "${APP_USER}" "${USER_SYSTEMD_DIR}"
 
 sed \
   -e "s|@MANAGER_DIR@|${MANAGER_DIR}|g" \
-  -e "s|@BIND_ADDR@|${BIND_ADDR}|g" \
-  -e "s|@WEB_PORT@|${WEB_PORT}|g" \
+  -e "s|@APP_UID@|${APP_UID}|g" \
   "${PATCH_DIR}/vban@.service.in" > "${USER_SYSTEMD_DIR}/vban@.service"
 
 sed \
   -e "s|@MANAGER_DIR@|${MANAGER_DIR}|g" \
   -e "s|@BIND_ADDR@|${BIND_ADDR}|g" \
   -e "s|@WEB_PORT@|${WEB_PORT}|g" \
+  -e "s|@APP_UID@|${APP_UID}|g" \
   "${PATCH_DIR}/vban-manager-web.service.in" > "${USER_SYSTEMD_DIR}/vban-manager-web.service"
 
 chown "${APP_USER}:${APP_USER}" "${USER_SYSTEMD_DIR}/vban@.service" "${USER_SYSTEMD_DIR}/vban-manager-web.service"
@@ -180,6 +180,14 @@ else
   if [[ "$UPDATE_MODE" = "1" ]]; then
     run_as_user systemctl --user try-restart vban-manager-web.service || \
       run_as_user systemctl --user start vban-manager-web.service || true
+    for args_file in "${MANAGER_DIR}/script/args-"*.txt; do
+      [[ -f "${args_file}" ]] || continue
+      slot_id="${args_file##*/args-}"
+      slot_id="${slot_id%.txt}"
+      if run_as_user systemctl --user is-active "vban@${slot_id}.service" >/dev/null 2>&1; then
+        run_as_user systemctl --user restart "vban@${slot_id}.service" || true
+      fi
+    done
   else
     run_as_user systemctl --user enable --now vban-manager-web.service
   fi

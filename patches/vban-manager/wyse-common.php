@@ -104,18 +104,18 @@ function wyse_prepare_audio($defaults)
 
     if ($backend === 'alsa') {
         if (($defaults['VBAN_STOP_PIPEWIRE_FOR_ALSA'] ?? '1') === '1') {
-            shell_exec('/usr/local/bin/vban-box-stop-pipewire 2>/dev/null');
+            shell_exec(wyse_user_env_prefix() . ' /usr/local/bin/vban-box-stop-pipewire 2>/dev/null');
             usleep(500000);
         }
         return;
     }
 
-    shell_exec('/usr/local/bin/vban-box-start-pipewire 2>/dev/null');
-    usleep(300000);
+    shell_exec(wyse_user_env_prefix() . ' /usr/local/bin/vban-box-start-pipewire 2>/dev/null');
+    usleep(500000);
 
     $sink = trim($defaults['VBAN_PULSE_SINK'] ?? '');
     if ($sink !== '') {
-        shell_exec('pactl set-default-sink ' . escapeshellarg($sink) . ' 2>/dev/null');
+        shell_exec(wyse_user_env_prefix() . ' pactl set-default-sink ' . escapeshellarg($sink) . ' 2>/dev/null');
     }
 }
 
@@ -129,23 +129,47 @@ function wyse_primary_ip()
     return $ip;
 }
 
+function wyse_user_env_prefix()
+{
+    $uid = function_exists('posix_getuid') ? posix_getuid() : 0;
+    if ($uid <= 0) {
+        $uid = trim(shell_exec('id -u') ?? '0');
+    }
+    return 'XDG_RUNTIME_DIR=/run/user/' . $uid
+        . ' DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/' . $uid . '/bus'
+        . ' PULSE_SERVER=unix:/run/user/' . $uid . '/pulse/native'
+        . ' PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+}
+
 function wyse_vban_sh($command)
 {
     global $script;
     chdir($script);
-    return shell_exec('./vban.sh ' . $command . ' 2>&1');
+    return shell_exec(wyse_user_env_prefix() . ' ./vban.sh ' . $command . ' 2>&1');
 }
 
 function wyse_server_status($id)
 {
     global $script;
     chdir($script);
-    $status = trim(shell_exec('./vban.sh is-active ' . escapeshellarg($id) . ' 2>&1') ?? '');
+    $status = trim(shell_exec(wyse_user_env_prefix() . ' ./vban.sh is-active ' . escapeshellarg($id) . ' 2>&1') ?? '');
 
     if ($status === 'active') {
         return 'active';
     }
     if ($status === 'activating') {
+        $journal = wyse_service_journal($id, 8);
+        if (stripos($journal, 'Could not find vban_') !== false ||
+            stripos($journal, 'not found in PATH') !== false ||
+            stripos($journal, 'Connection refused') !== false ||
+            stripos($journal, 'Failed to connect') !== false ||
+            stripos($journal, 'code=exited') !== false ||
+            stripos($journal, 'status=127') !== false ||
+            stripos($journal, 'status=203') !== false ||
+            stripos($journal, 'Start-Limit') !== false ||
+            (stripos($journal, 'pulse') !== false && stripos($journal, 'error') !== false)) {
+            return 'failed';
+        }
         return 'activating';
     }
     if ($status === 'failed' || $status === 'auto-restart') {
@@ -211,9 +235,19 @@ function wyse_stop_all_streams()
 function wyse_service_journal($id, $lines = 15)
 {
     $unit = 'vban@' . $id . '.service';
-    return trim(shell_exec(
-        'journalctl --user -u ' . escapeshellarg($unit) . ' -n ' . (int)$lines . ' --no-pager 2>&1'
+    $journal = trim(shell_exec(
+        wyse_user_env_prefix() . ' journalctl --user -u ' . escapeshellarg($unit) . ' -n ' . (int)$lines . ' --no-pager 2>&1'
     ) ?? '');
+
+    $logFile = '/opt/vban-manager/script/vban-' . $id . '.log';
+    if (is_readable($logFile)) {
+        $tail = trim(shell_exec('tail -n ' . (int)$lines . ' ' . escapeshellarg($logFile) . ' 2>/dev/null') ?? '');
+        if ($tail !== '') {
+            $journal .= ($journal !== '' ? "\n\n--- vban log ---\n" : '') . $tail;
+        }
+    }
+
+    return $journal;
 }
 
 function wyse_scan_streams($port, $seconds, $sender_filter = '')
@@ -232,7 +266,7 @@ function wyse_scan_streams($port, $seconds, $sender_filter = '')
     return $data;
 }
 
-function wyse_wait_service($id, $timeout = 4.0)
+function wyse_wait_service($id, $timeout = 8.0)
 {
     $deadline = microtime(true) + $timeout;
     while (microtime(true) < $deadline) {
@@ -243,9 +277,13 @@ function wyse_wait_service($id, $timeout = 4.0)
         if ($state === 'failed') {
             return 'failed';
         }
-        usleep(250000);
+        usleep(300000);
     }
-    return wyse_server_status($id);
+    $state = wyse_server_status($id);
+    if ($state === 'activating') {
+        return 'failed';
+    }
+    return $state;
 }
 
 function wyse_quote_arg($value)

@@ -34,7 +34,10 @@ include 'top.php';
         </p>
         <a class="btn btn-danger btn-sm" href="disconnect.php?id=<?php echo wyse_h($slot); ?>">Stop</a>
       <?php } elseif ($status === 'activating') { ?>
-        <p class="wyse-status-connecting mb-0">Connecting&hellip;</p>
+        <p class="wyse-status-connecting mb-1">Connecting&hellip;</p>
+        <?php $journal = wyse_service_journal($slot, 8); if ($journal !== '') { ?>
+        <pre class="wyse-log-snippet"><?php echo wyse_h($journal); ?></pre>
+        <?php } ?>
       <?php } elseif ($status === 'failed') { ?>
         <p class="wyse-status-failed mb-1">Connection failed</p>
         <pre class="wyse-log-snippet"><?php echo wyse_h(wyse_service_journal($slot, 8)); ?></pre>
@@ -114,7 +117,11 @@ include 'top.php';
       return;
     }
     if (data.state === 'activating') {
-      currentBody.innerHTML = '<p class="wyse-status-connecting mb-0">Connecting&hellip;</p>';
+      var html = '<p class="wyse-status-connecting mb-1">Connecting&hellip;</p>';
+      if (data.journal) {
+        html += '<pre class="wyse-log-snippet">' + escapeHtml(data.journal) + '</pre>';
+      }
+      currentBody.innerHTML = html;
       return;
     }
     if (data.state === 'failed') {

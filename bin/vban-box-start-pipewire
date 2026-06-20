@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+uid="$(id -u)"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
 systemctl --user start pipewire.socket pipewire.service || true
 systemctl --user start pipewire-pulse.socket pipewire-pulse.service || true
 systemctl --user start wireplumber.service || true
