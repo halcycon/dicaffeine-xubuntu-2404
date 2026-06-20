@@ -81,3 +81,7 @@ fi
 # Keep /tmp symlinks working for older conky configs.
 ln -sf "$QR_FILE" /tmp/dicaffeine-webui-qr.png 2>/dev/null || true
 ln -sf "$URL_FILE" /tmp/dicaffeine-webui-url.txt 2>/dev/null || true
+
+if command -v wyse-vban-update-qr >/dev/null 2>&1; then
+  wyse-vban-update-qr || true
+fi

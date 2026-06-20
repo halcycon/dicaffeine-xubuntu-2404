@@ -35,7 +35,6 @@ if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
     echo
   fi
 
-  echo "Scan QR to join setup Wi-Fi."
   exit 0
 fi
 

@@ -78,7 +78,10 @@ echo "== Installing shared helpers =="
 for helper in \
   wyse-ndi-status \
   wyse-ndi-update-qr \
+  wyse-ndi-qr-caption \
   wyse-vban-status \
+  wyse-vban-update-qr \
+  wyse-vban-qr-caption \
   wyse-vban-scan \
   wyse-vban-parse-args \
   wyse-vban-audio-devices \

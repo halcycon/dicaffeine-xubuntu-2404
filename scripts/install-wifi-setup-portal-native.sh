@@ -68,8 +68,11 @@ sudo install -d -m 0755 -o "$TARGET_USER" -g "$TARGET_USER" "$QR_DIR"
 
 # Avoid Ubuntu protected_regular issues in sticky /tmp when root/user both update QR files.
 sudo rm -f /tmp/dicaffeine-webui-qr.png /tmp/dicaffeine-webui-url.txt
+sudo rm -f /tmp/vban-audiobox-qr.png /tmp/vban-audiobox-url.txt
 sudo ln -sf "$QR_DIR/dicaffeine-webui-qr.png" /tmp/dicaffeine-webui-qr.png
 sudo ln -sf "$QR_DIR/dicaffeine-webui-url.txt" /tmp/dicaffeine-webui-url.txt
+sudo ln -sf "$QR_DIR/vban-audiobox-qr.png" /tmp/vban-audiobox-qr.png
+sudo ln -sf "$QR_DIR/vban-audiobox-url.txt" /tmp/vban-audiobox-url.txt
 
 CONKY_CONF="/home/$TARGET_USER/.config/conky/wyse-ndi.conf"
 if [ -f "$CONKY_CONF" ]; then

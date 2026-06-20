@@ -59,19 +59,22 @@ conky.config = {
     color2 = 'FFD866',
 
     minimum_width = 430,
-    minimum_height = 130,
+    minimum_height = 195,
     maximum_width = 430,
 
     gap_x = 20,
-    gap_y = 230,
+    gap_y = 245,
 
     border_inner_margin = 14,
     border_outer_margin = 0,
 };
 
 conky.text = [[
+${execi 10 /usr/local/bin/wyse-vban-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}VBAN AudioBox${color}${font}
 ${execi 5 /usr/local/bin/wyse-vban-status}
+${voffset 4}${alignr}${image /tmp/vban-audiobox-qr.png -s 100x100}
+${voffset 2}${alignr}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-vban-qr-caption}${color}${font}
 ]];
 EOF
 
@@ -104,7 +107,7 @@ conky.config = {
     color2 = 'A6E22E',
 
     minimum_width = 430,
-    minimum_height = 180,
+    minimum_height = 195,
     maximum_width = 430,
 
     gap_x = 20,
@@ -118,7 +121,8 @@ conky.text = [[
 ${execi 10 /usr/local/bin/wyse-ndi-update-qr >/dev/null 2>&1}
 ${font DejaVu Sans:bold:size=13}${color2}Dicaffeine Receiver${color}${font}
 ${execi 10 /usr/local/bin/wyse-ndi-status}
-${image /tmp/dicaffeine-webui-qr.png -p 300,42 -s 110x110}
+${voffset 4}${alignr}${image /tmp/dicaffeine-webui-qr.png -s 100x100}
+${voffset 2}${alignr}${font DejaVu Sans:size=8}${color1}${execi 10 /usr/local/bin/wyse-ndi-qr-caption}${color}${font}
 ]];
 EOF
 
@@ -154,6 +158,14 @@ sudo -u "$TARGET_USER" env \
   DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${TARGET_UID}/bus" \
   /usr/local/bin/wyse-ndi-update-qr || true
 
+if command -v wyse-vban-update-qr >/dev/null 2>&1; then
+  sudo -u "$TARGET_USER" env \
+    DISPLAY=:0 \
+    XAUTHORITY="$TARGET_HOME/.Xauthority" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${TARGET_UID}/bus" \
+    /usr/local/bin/wyse-vban-update-qr || true
+fi
+
 pkill -u "$TARGET_USER" -f 'conky.*wyse-vban.conf' 2>/dev/null || true
 pkill -u "$TARGET_USER" -f 'conky.*wyse-ndi.conf' 2>/dev/null || true
 
@@ -180,5 +192,8 @@ echo "  $TARGET_HOME/.config/conky/wyse-ndi.conf"
 echo
 echo "Helpers:"
 echo "  /usr/local/bin/wyse-vban-status"
+echo "  /usr/local/bin/wyse-vban-update-qr"
+echo "  /usr/local/bin/wyse-vban-qr-caption"
 echo "  /usr/local/bin/wyse-ndi-status"
 echo "  /usr/local/bin/wyse-ndi-update-qr"
+echo "  /usr/local/bin/wyse-ndi-qr-caption"

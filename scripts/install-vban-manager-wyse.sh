@@ -210,6 +210,11 @@ else
   fi
 fi
 
+if command -v wyse-vban-update-qr >/dev/null 2>&1; then
+  log "Refreshing VBAN overlay QR"
+  wyse-vban-update-qr || true
+fi
+
 log "Done"
 primary_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
 if [ -z "${primary_ip:-}" ]; then

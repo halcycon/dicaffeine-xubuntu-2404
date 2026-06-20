@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+STATE_FILE="/run/wyse-wifi-setup/state"
+
+if [ -f "$STATE_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$STATE_FILE" || true
+fi
+
+if [ "${WYSE_WIFI_SETUP_ACTIVE:-0}" = "1" ]; then
+  printf '%s\n' "Scan to configure WiFi"
+else
+  printf '%s\n' "Scan to Control"
+fi
