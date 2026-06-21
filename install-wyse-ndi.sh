@@ -44,6 +44,10 @@ if [ "$UPDATE_MODE" = "1" ]; then
 
   UPDATE_MODE=1 "$KIT_ROOT/scripts/install-common-helpers.sh"
 
+  if [ -x "$KIT_ROOT/scripts/install-xfce-headless-display.sh" ]; then
+    TARGET_USER="$TARGET_USER" bash "$KIT_ROOT/scripts/install-xfce-headless-display.sh"
+  fi
+
   if [ -x "$KIT_ROOT/scripts/install-sudoers-wyse-kit.sh" ]; then
     sudo TARGET_USER="$TARGET_USER" bash "$KIT_ROOT/scripts/install-sudoers-wyse-kit.sh"
   fi
@@ -402,6 +406,10 @@ sudo -u "$TARGET_USER" xfconf-query -c xfce4-screensaver -p /lock/enabled -n -t 
 sudo -u "$TARGET_USER" xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/presentation-mode -n -t bool -s true 2>/dev/null || true
 sudo -u "$TARGET_USER" xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/blank-on-ac -n -t int -s 0 2>/dev/null || true
 sudo -u "$TARGET_USER" xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/dpms-enabled -n -t bool -s false 2>/dev/null || true
+
+if [ -x ./scripts/install-xfce-headless-display.sh ]; then
+  TARGET_USER="$TARGET_USER" bash ./scripts/install-xfce-headless-display.sh
+fi
 
 echo "== Installing optional Dicaffeine boot/wallpaper theme =="
 
