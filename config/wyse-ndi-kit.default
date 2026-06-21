@@ -1,0 +1,24 @@
+# Wyse NDI kit install location and auto-update settings.
+# Installed to /etc/default/wyse-ndi-kit on first run (not overwritten on update).
+
+# Canonical checkout used for installs and auto-update.
+WYSE_NDI_KIT_DIR=/opt/wyse-ndi-kit
+
+# Git remote for clone/migrate when the kit has no origin configured.
+# Leave empty to use origin from an existing checkout.
+WYSE_NDI_KIT_GIT_REMOTE=
+
+# Branch to track (empty = detect from origin/HEAD, then main).
+WYSE_NDI_KIT_GIT_BRANCH=
+
+# Desktop user that owns the git checkout (SSH keys for private repos).
+WYSE_NDI_KIT_AUTO_UPDATE_USER=ndi
+
+# 1 = check git on boot and apply ./install-wyse-ndi.sh --update when behind.
+WYSE_NDI_KIT_AUTO_UPDATE=1
+
+# Seconds after boot before the first auto-update check.
+WYSE_NDI_KIT_AUTO_UPDATE_BOOT_DELAY_SEC=180
+
+# Extra random delay (0..N seconds) to spread load across many boxes.
+WYSE_NDI_KIT_AUTO_UPDATE_RANDOM_DELAY_SEC=120

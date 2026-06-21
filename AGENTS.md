@@ -67,7 +67,26 @@ Or: `./install-wyse-ndi.sh --update`
 | `FORCE_VBAN_BUILD` | `0` | Rebuild `vban_receptor` on update |
 | `RESTART_DICAFFEINE` | `0` | Restart dicaffeine after merge |
 
-Existing `/etc/default/wyse-vban` and `/etc/default/wyse-wifi-setup` are **never overwritten** on update.
+Existing `/etc/default/wyse-vban`, `/etc/default/wyse-wifi-setup`, and `/etc/default/wyse-ndi-kit` are **never overwritten** on update.
+
+---
+
+## Canonical kit path and auto-update
+
+On first install/update, the kit is migrated to **`/opt/wyse-ndi-kit`** (override with `WYSE_NDI_KIT_DIR` in `/etc/default/wyse-ndi-kit`). Running `./install-wyse-ndi.sh` from `~/dicaffeine-xubuntu-2404` or elsewhere re-execs from the canonical copy.
+
+**Boot auto-update** (systemd timer `wyse-ndi-kit-auto-update.timer`):
+
+1. Waits ~3 minutes after boot (+ random jitter)
+2. Skips during Wi‑Fi setup mode
+3. `git fetch` / fast-forward pull as `ndi`
+4. Runs `./install-wyse-ndi.sh --update`
+
+Config: `/etc/default/wyse-ndi-kit` — set `WYSE_NDI_KIT_AUTO_UPDATE=0` to disable. Log: `/var/log/wyse-ndi-kit-auto-update.log`.
+
+Manual check: `sudo /usr/local/bin/wyse-ndi-auto-update`
+
+Private git remotes need SSH keys for user `ndi` (`~/.ssh`).
 
 ---
 

@@ -79,6 +79,7 @@ for helper in \
   wyse-ndi-status \
   wyse-ndi-update-qr \
   wyse-ndi-qr-caption \
+  wyse-ndi-auto-update \
   wyse-vban-status \
   wyse-vban-update-qr \
   wyse-vban-qr-caption \
@@ -98,6 +99,7 @@ echo "== Installing default config stubs (only if missing) =="
 
 install_config_if_missing wyse-wifi-setup.default
 install_config_if_missing wyse-vban.default
+install_config_if_missing wyse-ndi-kit.default
 migrate_wyse_vban_config
 
 if [ "$UPDATE_MODE" = "1" ]; then

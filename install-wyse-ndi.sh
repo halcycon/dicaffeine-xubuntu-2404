@@ -19,6 +19,16 @@ fi
 
 cd "$(dirname "$0")"
 
+if [ -x ./scripts/wyse-ndi-kit-ensure-path.sh ]; then
+  bash ./scripts/wyse-ndi-kit-ensure-path.sh --migrate "$(pwd)"
+  canonical="$(bash ./scripts/wyse-ndi-kit-ensure-path.sh --print-canonical)"
+  current="$(pwd -P)"
+  if [ -n "${canonical:-}" ] && [ "$current" != "$canonical" ] && [ -x "$canonical/install-wyse-ndi.sh" ]; then
+    echo "Continuing from canonical kit at ${canonical}"
+    exec "$canonical/install-wyse-ndi.sh" "$@"
+  fi
+fi
+
 if [ "$UPDATE_MODE" = "1" ]; then
   echo "== Wyse NDI kit update mode =="
   echo "Refreshing helpers, overlays, Wi-Fi portal, and optional VBAN layer."
@@ -53,6 +63,10 @@ if [ "$UPDATE_MODE" = "1" ]; then
     sudo UPDATE_MODE=1 APP_USER="$TARGET_USER" ./scripts/install-vban-manager-wyse.sh
   else
     echo "VBAN update skipped (set INSTALL_VBAN=1 to install/update VBAN)."
+  fi
+
+  if [ -x ./scripts/install-auto-update.sh ]; then
+    UPDATE_MODE=1 ./scripts/install-auto-update.sh
   fi
 
   if [ "${RESTART_DICAFFEINE:-0}" = "1" ]; then
@@ -543,6 +557,14 @@ if [ "$install_vban" = "1" ]; then
   fi
 else
   echo "INSTALL_VBAN=0; skipping VBAN layer (set INSTALL_VBAN=1 to install)."
+fi
+
+echo "== Installing auto-update timer =="
+
+if [ -x ./scripts/install-auto-update.sh ]; then
+  ./scripts/install-auto-update.sh
+else
+  echo "Auto-update installer not found; skipping."
 fi
 
 echo "== Final sanity checks =="
