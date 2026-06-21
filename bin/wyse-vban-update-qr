@@ -13,6 +13,9 @@ META_FILE="${QR_DIR}/vban-audiobox-qr.meta"
 MANAGER_PORT="${VBAN_MANAGER_PORT:-8088}"
 
 mkdir -p "$QR_DIR" 2>/dev/null || true
+if ! [ -w "$QR_DIR" ] 2>/dev/null; then
+  /usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || sudo /usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || true
+fi
 
 primary_ip="$(
   ip -4 route get 1.1.1.1 2>/dev/null |

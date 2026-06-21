@@ -5,7 +5,11 @@ UPDATE_MODE="${UPDATE_MODE:-0}"
 KIT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "== Checking sudo access =="
-sudo -v
+if [ "$UPDATE_MODE" = "1" ] && [ -f /etc/sudoers.d/wyse-ndi-kit ]; then
+  echo "Update mode: wyse-ndi-kit sudoers already installed"
+else
+  sudo -v
+fi
 
 TARGET_USER="${SUDO_USER:-${TARGET_USER:-ndi}}"
 SETUP_SSID="${SETUP_SSID:-Dicaffeine-Setup}"
@@ -65,6 +69,7 @@ fi
 echo "== Preparing QR/status directory =="
 
 sudo install -d -m 0755 -o "$TARGET_USER" -g "$TARGET_USER" "$QR_DIR"
+/usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || true
 
 # Avoid Ubuntu protected_regular issues in sticky /tmp when root/user both update QR files.
 sudo rm -f /tmp/dicaffeine-webui-qr.png /tmp/dicaffeine-webui-url.txt

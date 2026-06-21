@@ -120,6 +120,7 @@ main() {
   fi
 
   log "Running install-wyse-ndi.sh --update"
+  /usr/local/bin/wyse-ndi-kit-cleanup-junk "$KIT_DIR" 2>/dev/null || true
   if ! env \
     TARGET_USER="$UPDATE_USER" \
     SUDO_USER="$UPDATE_USER" \

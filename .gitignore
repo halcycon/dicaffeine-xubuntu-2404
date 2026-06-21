@@ -3,3 +3,9 @@
 debs/*ndi*.deb
 debs/ndi*.deb
 
+# Accidental curl junk (malformed -H flags in repo root)
+/Accept:
+/Host:
+/User-Agent:
+/GET
+/POST

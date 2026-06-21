@@ -80,6 +80,8 @@ for helper in \
   wyse-ndi-update-qr \
   wyse-ndi-qr-caption \
   wyse-ndi-auto-update \
+  wyse-ndi-kit-cleanup-junk \
+  wyse-ensure-qr-dir \
   wyse-vban-status \
   wyse-vban-update-qr \
   wyse-vban-qr-caption \

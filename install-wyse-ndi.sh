@@ -9,15 +9,22 @@ for arg in "$@"; do
 done
 UPDATE_MODE="${UPDATE_MODE:-0}"
 
-TARGET_USER="${SUDO_USER:-$USER}"
+TARGET_USER="${SUDO_USER:-${TARGET_USER:-$USER}}"
 TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
 
-if [ "$TARGET_USER" = "root" ]; then
-  echo "Run this as the normal desktop user with sudo available, not directly as root."
+if [ "$(id -u)" -eq 0 ]; then
+  if [ -z "${TARGET_USER:-}" ] || [ "$TARGET_USER" = "root" ]; then
+    echo "When running as root, set TARGET_USER=ndi (or the desktop user)." >&2
+    exit 1
+  fi
+elif [ "$TARGET_USER" = "root" ]; then
+  echo "Run this as the normal desktop user with sudo available, not directly as root." >&2
   exit 1
 fi
 
-cd "$(dirname "$0")"
+KIT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+cd "$KIT_ROOT"
 
 if [ -x ./scripts/wyse-ndi-kit-ensure-path.sh ]; then
   bash ./scripts/wyse-ndi-kit-ensure-path.sh --migrate "$(pwd)"
@@ -35,18 +42,22 @@ if [ "$UPDATE_MODE" = "1" ]; then
   echo "Skipping .deb installs, NDI links, and bootloader workarounds."
   echo
 
-  UPDATE_MODE=1 ./scripts/install-common-helpers.sh
+  UPDATE_MODE=1 "$KIT_ROOT/scripts/install-common-helpers.sh"
 
-  if [ "${INSTALL_DESKTOP_INFO_OVERLAY:-1}" = "1" ] && [ -x ./scripts/install-desktop-info-overlay.sh ]; then
-    UPDATE_MODE=1 ./scripts/install-desktop-info-overlay.sh
+  if [ -x "$KIT_ROOT/scripts/install-sudoers-wyse-kit.sh" ]; then
+    sudo TARGET_USER="$TARGET_USER" bash "$KIT_ROOT/scripts/install-sudoers-wyse-kit.sh"
   fi
 
-  if [ "${INSTALL_WIFI_SETUP_PORTAL:-1}" = "1" ] && [ -x ./scripts/install-wifi-setup-portal-native.sh ]; then
-    UPDATE_MODE=1 ./scripts/install-wifi-setup-portal-native.sh
+  if [ "${INSTALL_DESKTOP_INFO_OVERLAY:-1}" = "1" ] && [ -x "$KIT_ROOT/scripts/install-desktop-info-overlay.sh" ]; then
+    UPDATE_MODE=1 "$KIT_ROOT/scripts/install-desktop-info-overlay.sh"
   fi
 
-  if [ -x ./scripts/merge-dicaffeine-config.sh ]; then
-    ./scripts/merge-dicaffeine-config.sh
+  if [ "${INSTALL_WIFI_SETUP_PORTAL:-1}" = "1" ] && [ -x "$KIT_ROOT/scripts/install-wifi-setup-portal-native.sh" ]; then
+    UPDATE_MODE=1 "$KIT_ROOT/scripts/install-wifi-setup-portal-native.sh"
+  fi
+
+  if [ -x "$KIT_ROOT/scripts/merge-dicaffeine-config.sh" ]; then
+    "$KIT_ROOT/scripts/merge-dicaffeine-config.sh"
   fi
 
   install_vban="${INSTALL_VBAN:-auto}"
@@ -58,15 +69,15 @@ if [ "$UPDATE_MODE" = "1" ]; then
     fi
   fi
 
-  if [ "$install_vban" = "1" ] && [ -x ./scripts/install-vban-manager-wyse.sh ]; then
+  if [ "$install_vban" = "1" ] && [ -x "$KIT_ROOT/scripts/install-vban-manager-wyse.sh" ]; then
     echo "== Updating VBAN layer =="
-    sudo UPDATE_MODE=1 APP_USER="$TARGET_USER" ./scripts/install-vban-manager-wyse.sh
+    sudo UPDATE_MODE=1 APP_USER="$TARGET_USER" bash "$KIT_ROOT/scripts/install-vban-manager-wyse.sh"
   else
     echo "VBAN update skipped (set INSTALL_VBAN=1 to install/update VBAN)."
   fi
 
-  if [ -x ./scripts/install-auto-update.sh ]; then
-    UPDATE_MODE=1 ./scripts/install-auto-update.sh
+  if [ -x "$KIT_ROOT/scripts/install-auto-update.sh" ]; then
+    UPDATE_MODE=1 "$KIT_ROOT/scripts/install-auto-update.sh"
   fi
 
   if [ "${RESTART_DICAFFEINE:-0}" = "1" ]; then
@@ -561,10 +572,15 @@ fi
 
 echo "== Installing auto-update timer =="
 
-if [ -x ./scripts/install-auto-update.sh ]; then
-  ./scripts/install-auto-update.sh
+if [ -x "$KIT_ROOT/scripts/install-auto-update.sh" ]; then
+  "$KIT_ROOT/scripts/install-auto-update.sh"
 else
   echo "Auto-update installer not found; skipping."
+fi
+
+if [ -x "$KIT_ROOT/scripts/install-sudoers-wyse-kit.sh" ]; then
+  echo "== Installing passwordless sudo for kit updates =="
+  sudo TARGET_USER="$TARGET_USER" bash "$KIT_ROOT/scripts/install-sudoers-wyse-kit.sh"
 fi
 
 echo "== Final sanity checks =="

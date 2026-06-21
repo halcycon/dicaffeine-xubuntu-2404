@@ -64,6 +64,19 @@ detect_git_branch() {
   printf '%s\n' "main"
 }
 
+cleanup_junk_files() {
+  local dir="$1"
+  if [ -x /usr/local/bin/wyse-ndi-kit-cleanup-junk ]; then
+    /usr/local/bin/wyse-ndi-kit-cleanup-junk "$dir" || true
+    return 0
+  fi
+  local script_dir
+  script_dir="$(cd "$(dirname "$0")/.." && pwd)"
+  if [ -x "${script_dir}/bin/wyse-ndi-kit-cleanup-junk" ]; then
+    "${script_dir}/bin/wyse-ndi-kit-cleanup-junk" "$dir" || true
+  fi
+}
+
 write_config_stub() {
   local remote="$1"
   local branch="$2"
@@ -94,6 +107,7 @@ migrate_to_canonical() {
 
   if [ -d "$canonical_resolved/.git" ] || [ -f "$canonical_resolved/install-wyse-ndi.sh" ]; then
     echo "Canonical kit already present at ${CANONICAL}"
+    cleanup_junk_files "$canonical_resolved"
     return 0
   fi
 
@@ -103,18 +117,33 @@ migrate_to_canonical() {
 
   echo "Installing kit to ${CANONICAL}"
 
-  if [ -n "$remote" ] && [ ! -d "$source/.git" ]; then
+  if [ -n "$remote" ]; then
     sudo mkdir -p "$(dirname "$CANONICAL")"
-    sudo -u "$TARGET_USER" git clone --branch "$branch" "$remote" "$CANONICAL"
+    echo "Cloning ${remote} (branch ${branch}) into ${CANONICAL}"
+    if [ -e "$CANONICAL" ]; then
+      sudo rm -rf "$CANONICAL"
+    fi
+    if ! sudo -u "$TARGET_USER" git clone --branch "$branch" "$remote" "$CANONICAL" 2>/dev/null; then
+      echo "Branch ${branch} clone failed; trying default branch..."
+      sudo -u "$TARGET_USER" git clone "$remote" "$CANONICAL"
+    fi
   elif [ -d "$source/.git" ] || [ -f "$source/install-wyse-ndi.sh" ]; then
     sudo mkdir -p "$(dirname "$CANONICAL")"
-    sudo rsync -a "$source/" "$CANONICAL/"
+    echo "No git remote configured; copying from ${source} (rsync)"
+    sudo rsync -a \
+      --exclude 'Accept:' \
+      --exclude 'Host:' \
+      --exclude 'User-Agent:' \
+      --exclude 'GET' \
+      --exclude 'POST' \
+      "$source/" "$CANONICAL/"
     sudo chown -R "$TARGET_USER:$TARGET_USER" "$CANONICAL"
   else
     echo "ERROR: cannot migrate ${source} — not a kit checkout and no git remote configured." >&2
     exit 1
   fi
 
+  cleanup_junk_files "$CANONICAL"
   write_config_stub "$remote" "$branch"
 }
 
@@ -158,6 +187,7 @@ fi
 
 if [ "$SOURCE_RESOLVED" = "$CANONICAL_RESOLVED" ]; then
   write_config_stub "$(detect_git_remote "$SOURCE_RESOLVED")" "$(detect_git_branch "$SOURCE_RESOLVED")"
+  cleanup_junk_files "$CANONICAL_RESOLVED"
   exit 0
 fi
 

@@ -67,8 +67,20 @@ if [[ "$need_vban_build" = true ]]; then
     php-cli
 else
   log "Update mode: skipping vban rebuild (set FORCE_VBAN_BUILD=1 to rebuild)"
-  DEBIAN_FRONTEND=noninteractive apt-get install -y php-cli 2>/dev/null || \
-    apt-get install -y php-cli || true
+  if ! command -v php >/dev/null 2>&1; then
+    for attempt in 1 2 3 4 5; do
+      if DEBIAN_FRONTEND=noninteractive apt-get install -y php-cli; then
+        break
+      fi
+      if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+        log "apt busy (attempt ${attempt}/5); waiting..."
+        sleep 10
+        continue
+      fi
+      log "Warning: could not install php-cli"
+      break
+    done
+  fi
 fi
 
 if [[ "$need_vban_build" = true ]]; then

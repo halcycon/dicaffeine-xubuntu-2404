@@ -27,7 +27,9 @@ fi
 UPDATE_MODE="$UPDATE_MODE" TARGET_USER="$TARGET_USER" bash "${KIT_ROOT}/scripts/install-common-helpers.sh"
 
 QR_DIR="/var/lib/wyse-ndi"
-sudo install -d -m 0755 -o "$TARGET_USER" -g "$TARGET_USER" "$QR_DIR"
+/usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || \
+  sudo /usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || \
+  sudo install -d -m 0755 -o "$TARGET_USER" -g "$TARGET_USER" "$QR_DIR"
 sudo rm -f "${QR_DIR}"/*.meta 2>/dev/null || true
 
 echo "== Creating Conky configs =="

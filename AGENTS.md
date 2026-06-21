@@ -88,6 +88,8 @@ Manual check: `sudo /usr/local/bin/wyse-ndi-auto-update`
 
 Private git remotes need SSH keys for user `ndi` (`~/.ssh`).
 
+**Passwordless sudo:** `/etc/sudoers.d/wyse-ndi-kit` lets user `ndi` run kit install/update and apt without a password (installed by `scripts/install-sudoers-wyse-kit.sh`). One manual `sudo` password is still needed the first time that file is installed.
+
 ---
 
 ## Config files

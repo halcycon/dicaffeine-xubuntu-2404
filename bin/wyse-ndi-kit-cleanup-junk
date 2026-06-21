@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Remove empty junk files sometimes created by malformed curl commands in a checkout.
+
+kit_dir="${1:-}"
+
+if [ -z "$kit_dir" ]; then
+  if [ -f /etc/default/wyse-ndi-kit ]; then
+    # shellcheck disable=SC1091
+    . /etc/default/wyse-ndi-kit
+  fi
+  kit_dir="${WYSE_NDI_KIT_DIR:-/opt/wyse-ndi-kit}"
+fi
+
+if [ ! -d "$kit_dir" ]; then
+  exit 0
+fi
+
+removed=0
+for name in 'Accept:' 'Host:' 'User-Agent:' 'GET' 'POST' 'PUT' 'HEAD'; do
+  path="${kit_dir}/${name}"
+  if [ -f "$path" ] && [ ! -s "$path" ]; then
+    rm -f "$path"
+    removed=$((removed + 1))
+  fi
+done
+
+if [ "$removed" -gt 0 ]; then
+  echo "Removed ${removed} junk file(s) from ${kit_dir}"
+fi

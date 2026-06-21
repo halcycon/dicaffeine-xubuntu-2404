@@ -13,6 +13,9 @@ URL_FILE="${QR_DIR}/dicaffeine-webui-url.txt"
 META_FILE="${QR_DIR}/dicaffeine-webui-qr.meta"
 
 mkdir -p "$QR_DIR" 2>/dev/null || true
+if ! [ -w "$QR_DIR" ] 2>/dev/null; then
+  /usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || sudo /usr/local/bin/wyse-ensure-qr-dir 2>/dev/null || true
+fi
 
 mode="normal"
 
